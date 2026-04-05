@@ -13,7 +13,7 @@ import type {
 import type { RawImageData } from "./image/types.js";
 import type { ImageBitmap1bpp, PrinterResponse } from "./protocol/types.js";
 import { FlowController } from "./transport/flow-control.js";
-import { findDeviceByName } from "./device/registry.js";
+import { findDevice } from "./device/registry.js";
 import { getProtocol } from "./protocol/registry.js";
 import { processImage } from "./image/pipeline.js";
 import { ThermoprintError, ErrorCode } from "./errors.js";
@@ -35,15 +35,16 @@ export class Printer {
     private readonly rx: BleCharacteristic,
     private readonly cx: BleCharacteristic | null,
     packetSize: number,
+    hasCxControl: boolean = true,
   ) {
-    this.flowController = new FlowController(tx, packetSize, profile.flowControl);
+    this.flowController = new FlowController(tx, packetSize, profile.flowControl, hasCxControl);
   }
 
   static async connect(
     transport: BleTransport,
     peripheral: BlePeripheral,
   ): Promise<Printer> {
-    const profile = findDeviceByName(peripheral.name);
+    const profile = findDevice(peripheral);
     if (!profile) {
       throw new ThermoprintError(
         ErrorCode.UNKNOWN_DEVICE,
@@ -87,7 +88,7 @@ export class Printer {
 
     let packetSize = profile.packetSize ?? DEFAULT_MTU;
 
-    const printer = new Printer(connection, profile, protocol, tx, rx, cx, packetSize);
+    const printer = new Printer(connection, profile, protocol, tx, rx, cx, packetSize, cx !== null);
 
     // Subscribe to RX for status/responses
     await rx.subscribe((data) => printer.handleRxData(data));
@@ -137,7 +138,8 @@ export class Printer {
       this.emit("progress", { bytesSent, totalBytes });
     }
 
-    await this.waitForPrintResult();
+    // Wait for a print-complete response; not all printers send one so treat timeout as success.
+    await this.waitForPrintResult().catch(() => {});
   }
 
   async getStatus(): Promise<PrinterStatus> {

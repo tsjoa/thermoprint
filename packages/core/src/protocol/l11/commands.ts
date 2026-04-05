@@ -105,28 +105,52 @@ export function selfCheck(): PrintCommand {
 }
 
 /**
- * Build a raster bitmap command: 1D 76 30 QQ WL WH HL HH + data
- * Quality: 0-3 (typically 0)
+ * Build a bitmap command matching the P15 column-major format.
+ *
+ * Header: 1D 76 30 QQ  (height/8)L (height/8)H  widthL widthH
+ * Data:   column-major, LSB = top pixel of each 8-row group,
+ *         groups ordered bottom-to-top within each column
+ *         (matches newprint_withfeed.py bitmap_to_packet exactly).
  */
 export function printBitmap(
   image: ImageBitmap1bpp,
   quality: number = 0,
 ): PrintCommand {
-  const { data: pixels, bytesPerRow, height } = image;
+  const { data: rowMajor, bytesPerRow, width, height } = image;
+  const bytesPerCol = Math.ceil(height / 8);
+
+  // Convert row-major MSB-first → column-major LSB-first (bottom group first)
+  const colMajor = new Uint8Array(width * bytesPerCol);
+  let idx = 0;
+  for (let x = 0; x < width; x++) {
+    // iterate y groups from bottom to top, matching Python's range(height-8, -1, -8)
+    for (let yGroup = bytesPerCol - 1; yGroup >= 0; yGroup--) {
+      const yBase = yGroup * 8;
+      let byte = 0;
+      for (let bit = 0; bit < 8; bit++) {
+        const py = yBase + bit;
+        if (py < height) {
+          const byteIdx = py * bytesPerRow + Math.floor(x / 8);
+          const bitShift = 7 - (x % 8);
+          if ((rowMajor[byteIdx] >> bitShift) & 1) {
+            byte |= 1 << bit;
+          }
+        }
+      }
+      colMajor[idx++] = byte;
+    }
+  }
+
+  // Header uses (height/8, width) — not (bytesPerRow, height)
   const header = Uint8Array.from([
-    0x1d,
-    0x76,
-    0x30,
-    quality & 0x03,
-    bytesPerRow & 0xff,
-    (bytesPerRow >> 8) & 0xff,
-    height & 0xff,
-    (height >> 8) & 0xff,
+    0x1d, 0x76, 0x30, quality & 0x03,
+    bytesPerCol & 0xff, (bytesPerCol >> 8) & 0xff,
+    width & 0xff, (width >> 8) & 0xff,
   ]);
 
-  const command = new Uint8Array(header.length + pixels.length);
+  const command = new Uint8Array(header.length + colMajor.length);
   command.set(header, 0);
-  command.set(pixels, header.length);
+  command.set(colMajor, header.length);
 
   return { label: "print-bitmap", data: command, bulk: true };
 }

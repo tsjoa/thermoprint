@@ -1,5 +1,6 @@
 export interface Config {
   defaultPrinter?: string;
+  defaultAddress?: string;
   density?: number;
   paperType?: "gap" | "continuous";
   timeout?: number;

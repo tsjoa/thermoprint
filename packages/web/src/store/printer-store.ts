@@ -2,7 +2,10 @@ import { create } from "zustand";
 import type { BlePeripheral, PrinterStatus } from "@thermoprint/core";
 import type { PrintSettings } from "./types.ts";
 
+export type ConnectionMode = "bluetooth" | "proxy";
+
 interface PrinterState {
+  connectionMode: ConnectionMode;
   peripheral: BlePeripheral | null;
   isConnected: boolean;
   isConnecting: boolean;
@@ -15,6 +18,7 @@ interface PrinterState {
 
   settings: PrintSettings;
 
+  setConnectionMode: (mode: ConnectionMode) => void;
   setPeripheral: (p: BlePeripheral | null) => void;
   setConnected: (v: boolean) => void;
   setConnecting: (v: boolean) => void;
@@ -28,6 +32,7 @@ interface PrinterState {
 }
 
 export const usePrinterStore = create<PrinterState>((set) => ({
+  connectionMode: "proxy",
   peripheral: null,
   isConnected: false,
   isConnecting: false,
@@ -46,6 +51,7 @@ export const usePrinterStore = create<PrinterState>((set) => ({
     printWidth: 384,
   },
 
+  setConnectionMode: (connectionMode) => set({ connectionMode }),
   setPeripheral: (peripheral) => set({ peripheral }),
   setConnected: (isConnected) => set({ isConnected }),
   setConnecting: (isConnecting) => set({ isConnecting }),

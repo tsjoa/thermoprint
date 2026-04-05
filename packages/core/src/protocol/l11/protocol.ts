@@ -25,17 +25,23 @@ export class L11Protocol implements PrinterProtocol {
     const { density, paperType = "gap" } = options;
     const commands: PrintCommand[] = [];
 
+    // Status query first (matches newprint_withfeed.py packet 1)
+    commands.push(cmd.getStatus());
+
     if (density !== undefined) {
       commands.push(cmd.setDensity(density));
     }
-    commands.push(...cmd.wakeup().data ? [cmd.wakeup()] : [cmd.wakeup()]);
+
+    // Wakeup (15 zeros) + enable, then bitmap data
+    commands.push(cmd.wakeup());
     commands.push(cmd.enable());
     commands.push(cmd.printBitmap(image));
 
+    // 5 line feeds to advance paper out from under the head
+    commands.push({ label: "feed-lf", data: new Uint8Array([0x0a, 0x0a, 0x0a, 0x0a, 0x0a]) });
+
     if (paperType === "gap") {
       commands.push(cmd.positionToGap());
-    } else {
-      commands.push(cmd.feedDots(100));
     }
 
     commands.push(cmd.stop());

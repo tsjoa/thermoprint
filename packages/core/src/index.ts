@@ -40,6 +40,7 @@ export type {
 export {
   registerDevice,
   findDeviceByName,
+  findDevice,
   getDevice,
   getRegisteredDevices,
 } from "./device/registry.js";

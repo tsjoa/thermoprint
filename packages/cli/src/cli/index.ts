@@ -4,6 +4,7 @@ import { registerPrintCommands } from "./commands/print.js";
 import { registerStatusCommands } from "./commands/status.js";
 import { registerConfigCommands } from "./commands/config.js";
 import { registerPrintTemplateCommands } from "./commands/print-template.js";
+import { registerServeCommands } from "./commands/serve.js";
 
 export function createCLI(): Command {
   const program = new Command();
@@ -18,6 +19,7 @@ export function createCLI(): Command {
   registerStatusCommands(program);
   registerConfigCommands(program);
   registerPrintTemplateCommands(program);
+  registerServeCommands(program);
 
   return program;
 }

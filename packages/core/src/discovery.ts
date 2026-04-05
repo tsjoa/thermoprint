@@ -1,5 +1,5 @@
-import type { BleTransport, BlePeripheral, ScanOptions } from "./transport/types.js";
-import { findDeviceByName } from "./device/registry.js";
+import type { BleTransport, BlePeripheral, ScanOptions, ScanHandle } from "./transport/types.js";
+import { findDevice } from "./device/registry.js";
 
 export interface DiscoverOptions extends ScanOptions {
   timeoutMs?: number;
@@ -19,14 +19,20 @@ export async function discover(
   return new Promise<BlePeripheral>(async (resolve, reject) => {
     let resolved = false;
 
-    const handle = await transport.scan((peripheral) => {
-      if (resolved) return;
-      if (findDeviceByName(peripheral.name)) {
-        resolved = true;
-        clearTimeout(timer);
-        handle.stop().then(() => resolve(peripheral));
-      }
-    }, scanOptions);
+    let handle: ScanHandle;
+    try {
+      handle = await transport.scan((peripheral) => {
+        if (resolved) return;
+        if (findDevice(peripheral)) {
+          resolved = true;
+          clearTimeout(timer);
+          handle.stop().then(() => resolve(peripheral));
+        }
+      }, scanOptions);
+    } catch (err) {
+      reject(err);
+      return;
+    }
 
     const timer = setTimeout(async () => {
       if (resolved) return;
@@ -48,23 +54,29 @@ export async function discoverAll(
   const found: BlePeripheral[] = [];
   const seen = new Set<string>();
 
-  return new Promise<BlePeripheral[]>(async (resolve) => {
+  return new Promise<BlePeripheral[]>(async (resolve, reject) => {
     let resolved = false;
 
-    const handle = await transport.scan((peripheral) => {
-      if (resolved) return;
-      if (seen.has(peripheral.id)) return;
-      seen.add(peripheral.id);
+    let handle: ScanHandle;
+    try {
+      handle = await transport.scan((peripheral) => {
+        if (resolved) return;
+        if (seen.has(peripheral.id)) return;
+        seen.add(peripheral.id);
 
-      if (findDeviceByName(peripheral.name)) {
-        found.push(peripheral);
-        if (maxResults && found.length >= maxResults) {
-          resolved = true;
-          clearTimeout(timer);
-          handle.stop().then(() => resolve(found));
+        if (findDevice(peripheral)) {
+          found.push(peripheral);
+          if (maxResults && found.length >= maxResults) {
+            resolved = true;
+            clearTimeout(timer);
+            handle.stop().then(() => resolve(found));
+          }
         }
-      }
-    }, scanOptions);
+      }, scanOptions);
+    } catch (err) {
+      reject(err);
+      return;
+    }
 
     const timer = setTimeout(async () => {
       if (resolved) return;

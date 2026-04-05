@@ -52,21 +52,28 @@ function rotateCanvas90CW(src: HTMLCanvasElement): HTMLCanvasElement {
 
 export function useCanvasExport(stageRef: RefObject<Konva.Stage | null>) {
   const printWidth = usePrinterStore((s) => s.settings.printWidth);
+  const connectionMode = usePrinterStore((s) => s.connectionMode);
   const labelConfig = useEditorStore((s) => s.labelConfig);
 
-  /** Export label rotated 90° CW and padded to printWidth for printing */
+  /** Export label for printing. Proxy mode sends unrotated; BLE mode rotates + pads. */
   const exportForPrint = useCallback((): RawImageData | null => {
     const stage = stageRef.current;
     if (!stage) return null;
 
     const raw = captureLabel(stage, labelConfig.widthPx, labelConfig.heightPx);
 
-    // Rotate 90° CW: editor width → feed length, editor height → print head width
+    // Proxy mode: send unrotated — the server + column-major encoding handles orientation
+    if (connectionMode === "proxy") {
+      const ctx = raw.getContext("2d")!;
+      const imgData = ctx.getImageData(0, 0, raw.width, raw.height);
+      return { data: imgData.data, width: raw.width, height: raw.height };
+    }
+
+    // BLE mode: rotate 90° CW and pad to printWidth for row-major raster
     const canvas = rotateCanvas90CW(raw);
     const rotatedW = canvas.width;
     const rotatedH = canvas.height;
 
-    // Pad to printWidth if narrower than the print head
     if (rotatedW < printWidth) {
       const padded = document.createElement("canvas");
       padded.width = printWidth;
@@ -83,7 +90,7 @@ export function useCanvasExport(stageRef: RefObject<Konva.Stage | null>) {
     const ctx = canvas.getContext("2d")!;
     const imgData = ctx.getImageData(0, 0, rotatedW, rotatedH);
     return { data: imgData.data, width: rotatedW, height: rotatedH };
-  }, [stageRef, printWidth, labelConfig]);
+  }, [stageRef, printWidth, connectionMode, labelConfig]);
 
   return { exportForPrint };
 }

@@ -1,4 +1,4 @@
-import noble from "@stoprocent/noble";
+import { createBluetooth } from "node-ble";
 import type {
   BleTransport,
   BleConnection,
@@ -9,159 +9,202 @@ import type {
   ScanHandle,
 } from "@thermoprint/core";
 
-// Map Noble peripheral to core BlePeripheral
-function toPeripheral(p: noble.Peripheral): BlePeripheral {
-  return {
-    id: p.id ?? p.uuid,
-    name: p.advertisement?.localName ?? "",
-    rssi: p.rssi ?? -100,
-  };
+// Singleton D-Bus connection — BlueZ on Linux, no privileges needed.
+let _bt: ReturnType<typeof createBluetooth> | null = null;
+function getBt() {
+  if (!_bt) _bt = createBluetooth();
+  return _bt;
+}
+process.on("exit", () => { try { _bt?.destroy(); } catch {} });
+
+async function getAdapter() {
+  return getBt().bluetooth.defaultAdapter();
 }
 
-// Noble uses short UUIDs for standard Bluetooth base UUIDs
-// e.g. "0000ff00-0000-1000-8000-00805f9b34fb" → "ff00"
-const BT_BASE_SUFFIX = "00001000800000805f9b34fb";
-
-function toShortUuid(uuid: string): string | null {
-  const stripped = uuid.replace(/-/g, "").toLowerCase();
-  if (stripped.length === 32 && stripped.startsWith("0000") && stripped.slice(8) === BT_BASE_SUFFIX) {
-    return stripped.slice(4, 8);
-  }
-  return null;
-}
-
+// BlueZ returns full UUIDs with dashes (lowercase). Normalize for comparison.
 function normalizeUuid(uuid: string): string {
-  return toShortUuid(uuid) ?? uuid.replace(/-/g, "").toLowerCase();
+  return uuid.replace(/-/g, "").toLowerCase();
 }
 
-// Track Noble peripherals so we can connect by ID later
-const peripheralMap = new Map<string, noble.Peripheral>();
-
-class NobleCharacteristic implements BleCharacteristic {
-  private listener: ((data: Uint8Array) => void) | null = null;
-
-  constructor(private readonly char: noble.Characteristic) {}
+class DbusCharacteristic implements BleCharacteristic {
+  constructor(private readonly char: any) {}
 
   async write(data: Uint8Array, withoutResponse: boolean): Promise<void> {
-    await this.char.writeAsync(Buffer.from(data), withoutResponse);
+    const buf = Buffer.from(data);
+    if (withoutResponse) {
+      await this.char.writeValueWithoutResponse(buf);
+    } else {
+      await this.char.writeValueWithResponse(buf);
+    }
   }
 
   async subscribe(listener: (data: Uint8Array) => void): Promise<void> {
-    this.listener = listener;
-    this.char.on("data", (data: Buffer) => {
-      this.listener?.(new Uint8Array(data));
-    });
-    await this.char.subscribeAsync();
+    this.char.on("valuechanged", (buf: Buffer) => listener(new Uint8Array(buf)));
+    await this.char.startNotifications();
   }
 
   async unsubscribe(): Promise<void> {
-    await this.char.unsubscribeAsync();
-    this.char.removeAllListeners("data");
-    this.listener = null;
+    await this.char.stopNotifications().catch(() => {});
+    this.char.removeAllListeners("valuechanged");
   }
 }
 
-class NobleService implements BleService {
-  constructor(private readonly characteristics: noble.Characteristic[]) {}
+class DbusService implements BleService {
+  constructor(private readonly service: any) {}
 
   async getCharacteristic(uuid: string): Promise<BleCharacteristic | null> {
-    const target = normalizeUuid(uuid);
-    const char = this.characteristics.find(
-      (c) => normalizeUuid(c.uuid) === target,
-    );
-    return char ? new NobleCharacteristic(char) : null;
+    try {
+      // BlueZ uses lowercase full UUIDs as keys; normalize our input to match.
+      const allUuids: string[] = await this.service.characteristics();
+      const target = normalizeUuid(uuid);
+      const match = allUuids.find((u) => normalizeUuid(u) === target);
+      if (!match) return null;
+      const char = await this.service.getCharacteristic(match);
+      return new DbusCharacteristic(char);
+    } catch {
+      return null;
+    }
   }
 }
 
-class NobleConnection implements BleConnection {
-  private connected = true;
+class DbusConnection implements BleConnection {
+  private _connected = true;
 
-  constructor(private readonly peripheral: noble.Peripheral) {
-    peripheral.once("disconnect", () => {
-      this.connected = false;
-    });
+  constructor(
+    private readonly device: any,
+    private readonly gattServer: any,
+  ) {
+    device.on("disconnect", () => { this._connected = false; });
   }
 
   async discoverService(uuid: string): Promise<BleService | null> {
-    const serviceFilter = [normalizeUuid(uuid)];
-
-    const result =
-      await this.peripheral.discoverSomeServicesAndCharacteristicsAsync(
-        serviceFilter,
-        [],
-      );
-    const characteristics = result.characteristics;
-    if (!characteristics || characteristics.length === 0) return null;
-    return new NobleService(characteristics);
+    try {
+      const allServices: string[] = await this.gattServer.services();
+      const target = normalizeUuid(uuid);
+      const match = allServices.find((u) => normalizeUuid(u) === target);
+      if (!match) return null;
+      const service = await this.gattServer.getPrimaryService(match);
+      return new DbusService(service);
+    } catch {
+      return null;
+    }
   }
 
   async disconnect(): Promise<void> {
-    if (this.connected) {
-      await this.peripheral.disconnectAsync();
-      this.connected = false;
+    if (this._connected) {
+      this._connected = false;
+      await this.device.disconnect().catch(() => {});
     }
   }
 
   get isConnected(): boolean {
-    return this.connected;
+    return this._connected;
   }
 }
 
 export class NobleBleTransport implements BleTransport {
-  private async waitForPoweredOn(): Promise<void> {
-    if (noble.state === "poweredOn") return;
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        noble.removeAllListeners("stateChange");
-        reject(new Error(`Bluetooth adapter not ready (state: ${noble.state}). Is Bluetooth enabled?`));
-      }, 5000);
-
-      noble.on("stateChange", (state: string) => {
-        if (state === "poweredOn") {
-          clearTimeout(timeout);
-          noble.removeAllListeners("stateChange");
-          resolve();
-        }
-      });
-    });
-  }
-
   async scan(
     onDiscover: (peripheral: BlePeripheral) => void,
     options?: ScanOptions,
   ): Promise<ScanHandle> {
-    await this.waitForPoweredOn();
+    const adapter = await getAdapter();
+    const wasDiscovering = await adapter.isDiscovering();
+    if (!wasDiscovering) await adapter.startDiscovery();
 
+    const seen = new Set<string>();
     const namePrefix = options?.namePrefix;
+    let stopped = false;
 
-    noble.on("discover", (peripheral: noble.Peripheral) => {
-      const name = peripheral.advertisement?.localName ?? "";
-      if (namePrefix && !name.startsWith(namePrefix)) return;
-      if (!name) return;
+    const processAddress = async (address: string) => {
+      if (seen.has(address)) return;
+      seen.add(address);
+      try {
+        const device = await adapter.getDevice(address);
+        const name: string = await device.getName().catch(() => "");
+        if (namePrefix && !name.startsWith(namePrefix)) return;
+        const rssi = Number(await device.getRSSI().catch(() => -100));
+        const uuids: string[] = await (device as any).helper
+          .prop("UUIDs")
+          .catch(() => []);
+        onDiscover({ id: address, name: name ?? "", rssi, serviceUuids: uuids ?? [] });
+      } catch {
+        // device not yet accessible, skip
+      }
+    };
 
-      const blePeriph = toPeripheral(peripheral);
-      peripheralMap.set(blePeriph.id, peripheral);
-      onDiscover(blePeriph);
-    });
+    // Poll for new devices every 500 ms (node-ble Adapter has no 'device' event)
+    const poll = setInterval(async () => {
+      if (stopped) return;
+      for (const addr of await adapter.devices()) processAddress(addr);
+    }, 500);
 
-    await noble.startScanningAsync([], true);
+    // Process already-known devices immediately
+    for (const addr of await adapter.devices()) processAddress(addr);
 
     return {
       stop: async () => {
-        await noble.stopScanningAsync();
-        noble.removeAllListeners("discover");
+        stopped = true;
+        clearInterval(poll);
+        if (!wasDiscovering) await adapter.stopDiscovery().catch(() => {});
       },
     };
   }
 
-  async connect(peripheral: BlePeripheral): Promise<BleConnection> {
-    const noblePeripheral = peripheralMap.get(peripheral.id);
-    if (!noblePeripheral) {
-      throw new Error(
-        `Peripheral "${peripheral.name}" (${peripheral.id}) not found — was it discovered?`,
-      );
+  async scanForAddress(address: string, timeoutMs: number): Promise<BlePeripheral> {
+    const adapter = await getAdapter();
+    const wasDiscovering = await adapter.isDiscovering();
+    if (!wasDiscovering) await adapter.startDiscovery();
+
+    try {
+      const device = await adapter.waitDevice(address, timeoutMs);
+      const name: string = await device.getName().catch(() => "");
+      const rssi = Number(await device.getRSSI().catch(() => -100));
+      const uuids: string[] = await (device as any).helper
+        .prop("UUIDs")
+        .catch(() => []);
+      return { id: address, name: name ?? "", rssi, serviceUuids: uuids ?? [] };
+    } finally {
+      if (!wasDiscovering) await adapter.stopDiscovery().catch(() => {});
     }
-    await noblePeripheral.connectAsync();
-    return new NobleConnection(noblePeripheral);
+  }
+
+  async connect(peripheral: BlePeripheral): Promise<BleConnection> {
+    const adapter = await getAdapter();
+    const adapterName: string = (adapter as any).adapter; // e.g. "hci0"
+
+    // Remove any stale BlueZ cache entry for this device. BlueZ tracks
+    // "PreferredBearer" and will try BR/EDR if the device was previously
+    // seen without LE-only flags (advertising flags 0x02 vs 0x06).
+    const serialized = `dev_${peripheral.id.replace(/:/g, "_").toUpperCase()}`;
+    const devicePath = `/org/bluez/${adapterName}/${serialized}`;
+    await (adapter as any).helper
+      .callMethod("RemoveDevice", devicePath)
+      .catch(() => {}); // ignore if not cached
+
+    // Start LE-filtered discovery so BlueZ re-classifies the device as LE.
+    const wasDiscovering = await adapter.isDiscovering();
+    if (!wasDiscovering) await adapter.startDiscovery();
+
+    // Wait for the device to appear in the LE-filtered cache.
+    await adapter.waitDevice(peripheral.id, 10000);
+
+    // Stop discovery before connecting (BlueZ may reject connect while scanning).
+    if (!wasDiscovering) await adapter.stopDiscovery().catch(() => {});
+
+    const device = await adapter.getDevice(peripheral.id);
+    await device.connect();
+
+    // Wait for BlueZ to finish GATT service discovery (ServicesResolved).
+    const deadline = Date.now() + 10000;
+    while (Date.now() < deadline) {
+      const resolved: boolean = await (device as any).helper
+        .prop("ServicesResolved")
+        .catch(() => false);
+      if (resolved) break;
+      await new Promise((r) => setTimeout(r, 200));
+    }
+
+    const gatt = await device.gatt();
+    return new DbusConnection(device, gatt);
   }
 }

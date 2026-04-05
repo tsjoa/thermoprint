@@ -2,6 +2,7 @@ export interface BlePeripheral {
   id: string;
   name: string;
   rssi: number;
+  serviceUuids: string[];
 }
 
 export interface ScanOptions {

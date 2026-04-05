@@ -13,6 +13,7 @@ export interface DeviceProfile {
   flowControl: Partial<FlowControlOptions>;
   defaults: { density: number; paperType: "gap" | "continuous" };
   namePrefixes: string[];
+  advertisedUuids?: string[];
 }
 
 export interface PrintOptions {

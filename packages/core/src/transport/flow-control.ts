@@ -12,14 +12,17 @@ export class FlowController {
   private credits: number;
   private readonly options: FlowControlOptions;
   private lastCreditTime: number = Date.now();
+  private readonly hasCxControl: boolean;
 
   constructor(
     private readonly tx: BleCharacteristic,
     private readonly packetSize: number,
     options?: Partial<FlowControlOptions>,
+    hasCxControl: boolean = true,
   ) {
     this.options = { ...DEFAULT_OPTIONS, ...options };
     this.credits = this.options.initialCredits;
+    this.hasCxControl = hasCxControl;
   }
 
   grantCredits(count: number): void {
@@ -38,14 +41,19 @@ export class FlowController {
     let offset = 0;
 
     while (offset < data.length) {
-      await this.waitForCredit();
+      if (this.hasCxControl) {
+        await this.waitForCredit();
+      } else if (offset > 0) {
+        // No CX characteristic: use timed pacing between packets (like simple BLE printers)
+        await new Promise((resolve) => setTimeout(resolve, this.options.timerIntervalMs));
+      }
 
       const remaining = data.length - offset;
       const chunkSize = Math.min(remaining, this.packetSize);
       const chunk = data.subarray(offset, offset + chunkSize);
 
       await this.tx.write(chunk, true); // withoutResponse = true
-      this.credits--;
+      if (this.hasCxControl) this.credits--;
       offset += chunkSize;
 
       onProgress?.(offset);

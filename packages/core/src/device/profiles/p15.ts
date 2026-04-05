@@ -16,6 +16,7 @@ export const p15Profile: DeviceProfile = {
     timerIntervalMs: 30,
   },
   defaults: { density: 2, paperType: "gap" },
+  advertisedUuids: ["e7810a7173ae499d8c15faa9aef0c3f2"],
   namePrefixes: [
     "P15",
     "P15R",
