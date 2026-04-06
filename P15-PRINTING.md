@@ -6,13 +6,16 @@ Printing to the P15 (MAC `03:0D:7A:D6:5E:B1`) requires bypassing BlueZ entirely
 and using `bluepy-helper` for raw HCI LE connections. The reference implementation
 is `newprint_withfeed.py`.
 
-### Why BlueZ doesn't work
+### The Dual-Mode BlueZ Bug (br-connection-profile-unavailable)
 
-The P15 is a **dual-mode** Bluetooth device (supports both BR/EDR Classic and BLE).
-BlueZ caches SDP records (Serial Port Profile, PnP) and always tries to connect
-via BR/EDR, resulting in `br-connection-profile-unavailable`. Attempts to force LE
-via `SetDiscoveryFilter`, `RemoveDevice`, or keeping discovery active during connect
-all failed. The only reliable solution is raw HCI LE via `bluepy-helper`.
+The P15 is a **dual-mode** Bluetooth device that supports both BR/EDR (Classic) and LE (Low Energy). 
+However, its Classic Bluetooth implementation expects a specific endpoint (like a Serial Port Profile). When Native Web Bluetooth (Chrome) or Python's `bleak` attempts to connect, BlueZ unconditionally prioritizes Classic BR/EDR connections for dual-mode devices. Because your Linux system doesn't have an active SPP profile agent by default, BlueZ aborts the entire connection instantly with `br-connection-profile-unavailable` before ever attempting Low Energy.
+
+Because of this built-in OS mechanism, Chrome Web Bluetooth will perpetually fail unless you force BlueZ into LE mode, or bypass BlueZ entirely.
+
+We have two working paths to bypass this:
+1. **The Native LE-Mode Bypass**: Dynamically power down the Bluetooth adapter and turn off its Classic Bluetooth capabilities so BlueZ is forced to operate in strict LE mode. Chrome will then successfully connect natively via LE.
+2. **The bluepy-helper Proxy**: Use a local node proxy server wrapping `bluepy-helper` which opens raw HCI LE sockets directly on the hardware, sidestepping BlueZ's profile manager entirely.
 
 ### bluepy-helper
 
@@ -123,10 +126,32 @@ This clears any stale BlueZ state that may interfere with raw HCI connections.
 
 ## Usage
 
-### Web UI with local print server (recommended)
+There are distinct ways to use the printer depending on if you want a seamless browser experience (Native Web Bluetooth) or want to bypass OS-level bugs via a local proxy script.
 
-This is the recommended way to print. The web UI sends images to a local HTTP server
-which handles the BLE connection via bluepy-helper.
+### 1. Chrome Native Web Bluetooth (LE-Only Toggle)
+
+If you want to print directly from Chrome without running a local proxy, you must force your Bluetooth radio into strict Low Energy (LE) mode. This eliminates the `br-connection-profile-unavailable` bug completely.
+
+**Step 1:** Force your Bluetooth adapter into LE-only mode:
+```bash
+sudo btmgmt power off
+sudo btmgmt bredr off
+sudo btmgmt power on
+```
+*(Note: As long as BR/EDR is turned off, standard Classic Bluetooth devices like audio headphones or wireless mice won't connect. You can restore default behavior at any time using `sudo btmgmt power off && sudo btmgmt bredr on && sudo btmgmt power on`).*
+
+**Step 2:** Start the web UI:
+```bash
+cd packages/web && bun run dev
+```
+
+**Step 3:** Open the web UI (default http://localhost:5173). Set the printer panel to "**BLE**" mode. Click Print, and when Chrome prompts you, select the P15 printer. It will instantly connect and print!
+
+---
+
+### 2. Web UI with local print server (Proxy Mode)
+
+If you don't want to disable Classic Bluetooth on your system, you can use the proxy server. The web UI sends images to a local HTTP server which handles the BLE connection via `bluepy-helper`, completely bypassing BlueZ.
 
 **Step 1**: Start the print server in one terminal:
 ```bash

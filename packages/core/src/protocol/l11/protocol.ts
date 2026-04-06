@@ -37,11 +37,11 @@ export class L11Protocol implements PrinterProtocol {
     commands.push(cmd.enable());
     commands.push(cmd.printBitmap(image));
 
-    // 5 line feeds to advance paper out from under the head
-    commands.push({ label: "feed-lf", data: new Uint8Array([0x0a, 0x0a, 0x0a, 0x0a, 0x0a]) });
-
     if (paperType === "gap") {
       commands.push(cmd.positionToGap());
+    } else {
+      // 5 line feeds to advance paper out from under the head for continuous paper
+      commands.push({ label: "feed-lf", data: new Uint8Array([0x0a, 0x0a, 0x0a, 0x0a, 0x0a]) });
     }
 
     commands.push(cmd.stop());

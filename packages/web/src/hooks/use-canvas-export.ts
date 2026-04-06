@@ -1,7 +1,6 @@
 import { useCallback, type RefObject } from "react";
 import type Konva from "konva";
 import type { RawImageData } from "@thermoprint/core";
-import { usePrinterStore } from "../store/printer-store.ts";
 import { useEditorStore } from "../store/editor-store.ts";
 
 /**
@@ -36,61 +35,20 @@ function captureLabel(stage: Konva.Stage, widthPx: number, heightPx: number): HT
   return canvas;
 }
 
-/**
- * Rotate a canvas 90° clockwise.
- */
-function rotateCanvas90CW(src: HTMLCanvasElement): HTMLCanvasElement {
-  const dst = document.createElement("canvas");
-  dst.width = src.height;
-  dst.height = src.width;
-  const ctx = dst.getContext("2d")!;
-  ctx.translate(dst.width, 0);
-  ctx.rotate(Math.PI / 2);
-  ctx.drawImage(src, 0, 0);
-  return dst;
-}
-
 export function useCanvasExport(stageRef: RefObject<Konva.Stage | null>) {
-  const printWidth = usePrinterStore((s) => s.settings.printWidth);
-  const connectionMode = usePrinterStore((s) => s.connectionMode);
   const labelConfig = useEditorStore((s) => s.labelConfig);
 
-  /** Export label for printing. Proxy mode sends unrotated; BLE mode rotates + pads. */
+  /** Export label for printing. Returns unrotated canvas; protocol handles orientation. */
   const exportForPrint = useCallback((): RawImageData | null => {
     const stage = stageRef.current;
     if (!stage) return null;
 
     const raw = captureLabel(stage, labelConfig.widthPx, labelConfig.heightPx);
-
-    // Proxy mode: send unrotated — the server + column-major encoding handles orientation
-    if (connectionMode === "proxy") {
-      const ctx = raw.getContext("2d")!;
-      const imgData = ctx.getImageData(0, 0, raw.width, raw.height);
-      return { data: imgData.data, width: raw.width, height: raw.height };
-    }
-
-    // BLE mode: rotate 90° CW and pad to printWidth for row-major raster
-    const canvas = rotateCanvas90CW(raw);
-    const rotatedW = canvas.width;
-    const rotatedH = canvas.height;
-
-    if (rotatedW < printWidth) {
-      const padded = document.createElement("canvas");
-      padded.width = printWidth;
-      padded.height = rotatedH;
-      const pCtx = padded.getContext("2d")!;
-      pCtx.fillStyle = "#ffffff";
-      pCtx.fillRect(0, 0, printWidth, rotatedH);
-      const offsetX = Math.floor((printWidth - rotatedW) / 2);
-      pCtx.drawImage(canvas, offsetX, 0);
-      const imgData = pCtx.getImageData(0, 0, printWidth, rotatedH);
-      return { data: imgData.data, width: printWidth, height: rotatedH };
-    }
-
-    const ctx = canvas.getContext("2d")!;
-    const imgData = ctx.getImageData(0, 0, rotatedW, rotatedH);
-    return { data: imgData.data, width: rotatedW, height: rotatedH };
-  }, [stageRef, printWidth, connectionMode, labelConfig]);
+    const ctx = raw.getContext("2d")!;
+    const imgData = ctx.getImageData(0, 0, raw.width, raw.height);
+    
+    return { data: imgData.data, width: raw.width, height: raw.height };
+  }, [stageRef, labelConfig]);
 
   return { exportForPrint };
 }
