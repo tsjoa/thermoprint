@@ -36,6 +36,32 @@
 
 ---
 
+## 🐧 Linux Printing Workarounds
+
+Due to a bug in how Linux (BlueZ) handles dual-mode BLE devices like the P15, connecting requires one of two options:
+
+**Option 1: Disable BR/EDR (Native Web Bluetooth)**
+Force your adapter into LE-only mode. Chrome Web Bluetooth will then connect flawlessly.
+```bash
+sudo btmgmt power off && sudo btmgmt bredr off && sudo btmgmt power on
+```
+Use the Web Editor with the **BLE** setting. *(Restore normal Bluetooth later with `bredr on`)*.
+
+**Option 2: Use the Local Proxy Server**
+Bypass BlueZ's profile manager entirely using our local proxy.
+```bash
+# Terminal 1: Start the proxy with your printer's MAC address
+thermoprint serve -a 03:0D:7A:D6:5E:B1
+
+# Terminal 2: Run the web UI locally
+cd packages/web && bun run dev
+```
+Open the web UI and select **Local** in the printer panel.
+
+*(See [P15-PRINTING.md](P15-PRINTING.md) for full context).*
+
+---
+
 ## Features
 
 **Web Editor** — [try it now](https://tomladder.github.io/thermoprint/)
