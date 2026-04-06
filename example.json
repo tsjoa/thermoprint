@@ -1,0 +1,15 @@
+{
+  "label": { "widthMm": 40, "heightMm": 12 },
+  "elements": [
+    {
+      "type": "text",
+      "x": 4,
+      "y": 4,
+      "width": 200,
+      "height": 40,
+      "text": "1234",
+      "fontSize": 48,
+      "fontFamily": "sans-serif"
+    }
+  ]
+}
