@@ -28,15 +28,14 @@ export function generateQrLabelTemplate(options: CreateLabelOptions) {
   const elements: any[] = [];
 
   if (showQr) {
-    // QR code: larger size (84px / 10.5mm), y = 6px (vertically centered)
-    // qrX = 220px (leaves 0.5mm physical right margin)
+    // QR code (PERFECT POSITION & SIZE): 84px size, qrX = 220px, qrY = 6px
     const qrSize = 84;
     const qrX = 220;
     const qrY = Math.round((heightPx - qrSize) / 2); // 6px
 
-    // Text box: left offset -32px (2mm further left), width 220px, left-aligned text
-    const textX = -32;
-    const textWidth = qrX - 8 - textX; // 220 - 8 - (-32) = 244px
+    // Text box: moved 4mm right to x = 0px, left-aligned text
+    const textX = 0;
+    const textWidth = qrX - 8 - textX; // 220 - 8 - 0 = 212px
 
     const lines = formattedText.split("\n");
     const lineCount = Math.min(lines.length, 3);
@@ -78,7 +77,7 @@ export function generateQrLabelTemplate(options: CreateLabelOptions) {
     });
   } else {
     // Full width text
-    const textX = -32;
+    const textX = 0;
     const textWidth = widthPx - textX;
 
     const lines = formattedText.split("\n");

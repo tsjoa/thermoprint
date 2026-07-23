@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Utility script to generate label JSON templates (matching example_with_qrcode.json format)
-with automatic text and QR code placement, exact 0.5mm margins, left-aligned text, and 3-line support.
+with automatic text and QR code placement, exact margins, left-aligned text, and 3-line support.
 """
 
 import json
@@ -22,8 +22,8 @@ def generate_label(text, qr_content=None, width_mm=40, height_mm=12, font_size=2
         qr_x = 220
         qr_y = max(4, (height_px - qr_size) // 2) # 6px
 
-        text_x = -32
-        text_width = qr_x - 8 - text_x # 244px
+        text_x = 0
+        text_width = qr_x - 8 - text_x # 212px
 
         lines = formatted_text.split('\n')
         line_count = min(len(lines), 3)
@@ -63,7 +63,7 @@ def generate_label(text, qr_content=None, width_mm=40, height_mm=12, font_size=2
             }
         })
     else:
-        text_x = -32
+        text_x = 0
         text_width = width_px - text_x
         lines = formatted_text.split('\n')
         line_count = min(len(lines), 3)
