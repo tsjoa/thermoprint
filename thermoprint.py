@@ -15,6 +15,28 @@ class ThermoprintError(Exception):
     pass
 
 
+def format_label_preview(text: str, show_qr: bool = True) -> str:
+    """
+    Format a terminal ASCII box preview of the label (matching CLI thermoprint label format).
+    """
+    cleaned = text.replace('\\n', '\n')
+    lines = cleaned.split('\n')[:3]
+
+    line1 = (lines[0] if len(lines) > 0 else "")[:25].ljust(25)
+    line2 = (lines[1] if len(lines) > 1 else "")[:25].ljust(25)
+    line3 = (lines[2] if len(lines) > 2 else "")[:25].ljust(25)
+
+    qr_box = ["┌──────┐", "│  QR  │", "└──────┘"] if show_qr else ["        ", "        ", "        "]
+
+    top  = "┌─────────────────────────────────────────┐"
+    row1 = f"│ {line1}   {qr_box[0]}    │"
+    row2 = f"│ {line2}   {qr_box[1]}    │"
+    row3 = f"│ {line3}   {qr_box[2]}    │"
+    bot  = "└─────────────────────────────────────────┘"
+
+    return "\n".join([top, row1, row2, row3, bot])
+
+
 def print_label(
     text: str,
     address: str = "03:0D:7A:D6:5E:B1",
