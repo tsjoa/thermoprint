@@ -20,7 +20,7 @@ export function registerLabelCommands(program: Command): void {
     .option("-a, --address <mac>", "target printer BLE MAC address (e.g. 03:0D:7A:D6:5E:B1)")
     .option("-p, --printer <name>", "target printer name")
     .option("-o, --out <path>", "save generated JSON template to file")
-    .option("--font-size <px>", "font size in px", "30")
+    .option("--font-size <px>", "font size in px", "22")
     .option("--width-mm <mm>", "label width in mm", "40")
     .option("--height-mm <mm>", "label height in mm", "12")
     .option("-d, --density <1-3>", "print density")
@@ -35,7 +35,7 @@ export function registerLabelCommands(program: Command): void {
       const printerAddress = opts.address;
       const widthMm = parseFloat(opts.widthMm) || 40;
       const heightMm = parseFloat(opts.heightMm) || 12;
-      const fontSize = parseInt(opts.fontSize) || 30;
+      const fontSize = parseInt(opts.fontSize) || 22;
 
       const template = generateQrLabelTemplate({
         text: textArg,
