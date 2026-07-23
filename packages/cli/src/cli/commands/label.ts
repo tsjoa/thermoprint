@@ -48,6 +48,12 @@ export function registerLabelCommands(program: Command): void {
         border: !!opts.border,
       });
 
+      if (template.warnings && template.warnings.length > 0 && !opts.json) {
+        for (const w of template.warnings) {
+          console.warn(chalk.yellow(`⚠️  Warning: ${w}`));
+        }
+      }
+
       if (opts.out) {
         const outPath = path.resolve(opts.out);
         fs.writeFileSync(outPath, JSON.stringify(template, null, 2));

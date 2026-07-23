@@ -34,6 +34,20 @@ export function generateQrLabelTemplate(options: CreateLabelOptions) {
   const widthPx = Math.round(widthMm * 8); // 320px
   const heightPx = Math.round(heightMm * 8); // 96px
 
+  const lines = formattedText.split("\n");
+  const maxAllowedChars = 16;
+  const warnings: string[] = [];
+
+  if (showQr) {
+    for (const l of lines) {
+      if (l.length > maxAllowedChars) {
+        warnings.push(
+          `Line "${l}" exceeds ${maxAllowedChars} characters (${l.length} chars). Text longer than 16 chars may overflow into the QR code and cause BLE disconnection.`,
+        );
+      }
+    }
+  }
+
   const elements: any[] = [];
 
   if (showQr) {
@@ -42,11 +56,10 @@ export function generateQrLabelTemplate(options: CreateLabelOptions) {
     const qrX = 220;
     const qrY = Math.round((heightPx - qrSize) / 2); // 6px
 
-    // Text box: moved another 2mm right to x = 16px, width = 196px
+    // Text box: moved 4mm right to x = 16px, width = 196px
     const textX = 16;
     const textWidth = qrX - 8 - textX; // 220 - 8 - 16 = 196px
 
-    const lines = formattedText.split("\n");
     const lineCount = Math.min(lines.length, 3);
     const estimatedTextHeight = fontSize + (lineCount - 1) * (fontSize * 1.2);
     const textY = Math.max(4, Math.round((heightPx - estimatedTextHeight) / 2));
@@ -108,7 +121,6 @@ export function generateQrLabelTemplate(options: CreateLabelOptions) {
     const textX = 16;
     const textWidth = widthPx - textX;
 
-    const lines = formattedText.split("\n");
     const lineCount = Math.min(lines.length, 3);
     const estimatedTextHeight = fontSize + (lineCount - 1) * (fontSize * 1.2);
     const textY = Math.max(4, Math.round((heightPx - estimatedTextHeight) / 2));
@@ -162,6 +174,7 @@ export function generateQrLabelTemplate(options: CreateLabelOptions) {
       heightPx,
     },
     elements,
+    warnings,
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };

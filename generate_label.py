@@ -16,6 +16,18 @@ def generate_label(text, qr_content=None, width_mm=40, height_mm=12, font_size=2
     width_px = int(width_mm * 8) # 320px
     height_px = int(height_mm * 8) # 96px
 
+    lines = formatted_text.split('\n')
+    max_allowed_chars = 16
+    warnings = []
+
+    if show_qr:
+        for l in lines:
+            if len(l) > max_allowed_chars:
+                warnings.append(
+                    f'Line "{l}" exceeds {max_allowed_chars} characters ({len(l)} chars). '
+                    f'Text longer than 16 chars may overflow into the QR code and cause BLE disconnection.'
+                )
+
     elements = []
     if show_qr:
         qr_size = 84
@@ -25,7 +37,6 @@ def generate_label(text, qr_content=None, width_mm=40, height_mm=12, font_size=2
         text_x = 16
         text_width = qr_x - 8 - text_x # 196px
 
-        lines = formatted_text.split('\n')
         line_count = min(len(lines), 3)
         estimated_text_height = font_size + (line_count - 1) * (font_size * 1.2)
         text_y = max(4, int((height_px - estimated_text_height) // 2))
@@ -83,7 +94,6 @@ def generate_label(text, qr_content=None, width_mm=40, height_mm=12, font_size=2
     else:
         text_x = 16
         text_width = width_px - text_x
-        lines = formatted_text.split('\n')
         line_count = min(len(lines), 3)
         estimated_text_height = font_size + (line_count - 1) * (font_size * 1.2)
         text_y = max(4, int((height_px - estimated_text_height) // 2))
@@ -126,7 +136,7 @@ def generate_label(text, qr_content=None, width_mm=40, height_mm=12, font_size=2
             }
         })
 
-    return {
+    result = {
         "name": formatted_text.split('\n')[0] or "Label",
         "label": {
             "widthMm": width_mm,
@@ -136,6 +146,10 @@ def generate_label(text, qr_content=None, width_mm=40, height_mm=12, font_size=2
         },
         "elements": elements
     }
+    if warnings:
+        result["warnings"] = warnings
+
+    return result
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate thermal print label JSON with matching QR code.")
@@ -159,6 +173,10 @@ if __name__ == "__main__":
         show_qr=not args.no_qr,
         border=args.border
     )
+
+    if "warnings" in data:
+        for w in data["warnings"]:
+            sys.stderr.write(f"⚠️  Warning: {w}\n")
 
     json_output = json.dumps(data, indent=2)
 
