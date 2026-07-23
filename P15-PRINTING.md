@@ -90,11 +90,15 @@ The web UI's `useCanvasExport` hook checks `connectionMode` and only rotates in 
 
 The printer works best with compact images. The Python reference sends ~170×96 pixels
 for a line of text. The web UI's label editor produces larger images (e.g., 320×96 for
-a 40×12mm label). The proxy server trims whitespace with `sharp.trim()` before printing
-and pads the height to a multiple of 8 (required by the column-major encoding).
+a 40×12mm label).
 
-Large images (e.g., 384×320) will either print incorrectly or not at all — the printer
+Large images or overlong text content will either print incorrectly or fail to print — the printer
 has a limited receive buffer.
+
+### Line Length & Character Limits (40×12mm Labels)
+
+- **Max Characters Per Line**: At default 22px font size on a 40×12mm label (with QR code), a single line can contain up to **16 characters** (e.g. `123456789_123456`).
+- **Overlong Line Failure Mode**: If a text line exceeds the bounding box (17+ characters), the printer drops the BLE connection mid-stream. This results in a `bluepy-helper exited` error, and the label does not print. A subsequent command will re-establish the connection.
 
 ### Print packet sequence
 

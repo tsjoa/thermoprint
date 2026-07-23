@@ -10,6 +10,13 @@ export interface CreateLabelOptions {
   border?: boolean;
 }
 
+/**
+ * Generate a JSON label template with text + QR code.
+ *
+ * NOTE: For 40x12mm labels with QR code at 22px font size, the maximum character length per line is 16 characters
+ * (e.g. "123456789_123456"). Lines exceeding 16 characters overflow the text bounding box and will cause the printer
+ * to drop the BLE connection (bluepy-helper exited error).
+ */
 export function generateQrLabelTemplate(options: CreateLabelOptions) {
   const {
     text,
