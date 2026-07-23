@@ -9,7 +9,7 @@ import sys
 import uuid
 import argparse
 
-def generate_label(text, qr_content=None, width_mm=40, height_mm=12, font_size=22, show_qr=True):
+def generate_label(text, qr_content=None, width_mm=40, height_mm=12, font_size=22, show_qr=True, border=False):
     formatted_text = text.replace('\\n', '\n')
     qr_text = qr_content if qr_content else formatted_text.replace('\n', ' ')
 
@@ -22,13 +22,31 @@ def generate_label(text, qr_content=None, width_mm=40, height_mm=12, font_size=2
         qr_x = 220
         qr_y = max(4, (height_px - qr_size) // 2) # 6px
 
-        text_x = 0
-        text_width = qr_x - 8 - text_x # 212px
+        text_x = 16
+        text_width = qr_x - 8 - text_x # 196px
 
         lines = formatted_text.split('\n')
         line_count = min(len(lines), 3)
         estimated_text_height = font_size + (line_count - 1) * (font_size * 1.2)
         text_y = max(4, int((height_px - estimated_text_height) // 2))
+        text_height = int(estimated_text_height + 4)
+
+        if border:
+            elements.append({
+                "id": str(uuid.uuid4()),
+                "type": "rect",
+                "x": text_x,
+                "y": text_y,
+                "width": text_width,
+                "height": text_height,
+                "rotation": 0,
+                "props": {
+                    "shapeType": "rect",
+                    "fill": "none",
+                    "stroke": "#000000",
+                    "strokeWidth": 1
+                }
+            })
 
         elements.append({
             "id": str(uuid.uuid4()),
@@ -36,7 +54,7 @@ def generate_label(text, qr_content=None, width_mm=40, height_mm=12, font_size=2
             "x": text_x,
             "y": text_y,
             "width": text_width,
-            "height": height_px - 8,
+            "height": text_height,
             "rotation": 0,
             "props": {
                 "text": formatted_text,
@@ -63,12 +81,30 @@ def generate_label(text, qr_content=None, width_mm=40, height_mm=12, font_size=2
             }
         })
     else:
-        text_x = 0
+        text_x = 16
         text_width = width_px - text_x
         lines = formatted_text.split('\n')
         line_count = min(len(lines), 3)
         estimated_text_height = font_size + (line_count - 1) * (font_size * 1.2)
         text_y = max(4, int((height_px - estimated_text_height) // 2))
+        text_height = int(estimated_text_height + 4)
+
+        if border:
+            elements.append({
+                "id": str(uuid.uuid4()),
+                "type": "rect",
+                "x": text_x,
+                "y": text_y,
+                "width": text_width,
+                "height": text_height,
+                "rotation": 0,
+                "props": {
+                    "shapeType": "rect",
+                    "fill": "none",
+                    "stroke": "#000000",
+                    "strokeWidth": 1
+                }
+            })
 
         elements.append({
             "id": str(uuid.uuid4()),
@@ -76,7 +112,7 @@ def generate_label(text, qr_content=None, width_mm=40, height_mm=12, font_size=2
             "x": text_x,
             "y": text_y,
             "width": text_width,
-            "height": height_px - 8,
+            "height": text_height,
             "rotation": 0,
             "props": {
                 "text": formatted_text,
@@ -110,6 +146,7 @@ if __name__ == "__main__":
     parser.add_argument("--height-mm", type=float, default=12, help="Height in mm (default: 12)")
     parser.add_argument("--font-size", type=int, default=22, help="Font size in px (default: 22)")
     parser.add_argument("--no-qr", action="store_true", help="Disable QR code generation")
+    parser.add_argument("-b", "--border", action="store_true", help="Print fine outline border around text box")
 
     args = parser.parse_args()
 
@@ -119,7 +156,8 @@ if __name__ == "__main__":
         width_mm=args.width_mm,
         height_mm=args.height_mm,
         font_size=args.font_size,
-        show_qr=not args.no_qr
+        show_qr=not args.no_qr,
+        border=args.border
     )
 
     json_output = json.dumps(data, indent=2)

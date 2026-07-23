@@ -27,6 +27,7 @@ export function registerLabelCommands(program: Command): void {
     .option("--paper <type>", "paper type: gap or continuous")
     .option("--dither <mode>", "dithering: floyd-steinberg, threshold, none")
     .option("--threshold <0-255>", "binarization cutoff")
+    .option("-b, --border", "print fine outline border around text box")
     .option("--save-image <path>", "save rendered PNG to file")
     .option("--dry-run", "generate/render only, do not print")
     .option("--json", "output generated template or result as JSON")
@@ -44,6 +45,7 @@ export function registerLabelCommands(program: Command): void {
         heightMm,
         fontSize,
         showQr: opts.qr !== false,
+        border: !!opts.border,
       });
 
       if (opts.out) {

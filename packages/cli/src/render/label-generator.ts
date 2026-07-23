@@ -7,6 +7,7 @@ export interface CreateLabelOptions {
   heightMm?: number;
   fontSize?: number;
   showQr?: boolean;
+  border?: boolean;
 }
 
 export function generateQrLabelTemplate(options: CreateLabelOptions) {
@@ -16,6 +17,7 @@ export function generateQrLabelTemplate(options: CreateLabelOptions) {
     heightMm = 12,
     fontSize = 22,
     showQr = true,
+    border = false,
   } = options;
 
   // Unescape literal \n strings if passed from CLI
@@ -28,19 +30,38 @@ export function generateQrLabelTemplate(options: CreateLabelOptions) {
   const elements: any[] = [];
 
   if (showQr) {
-    // QR code (PERFECT POSITION & SIZE): 84px size, qrX = 220px, qrY = 6px
+    // QR code (FIXED): 84px size, qrX = 220px, qrY = 6px
     const qrSize = 84;
     const qrX = 220;
     const qrY = Math.round((heightPx - qrSize) / 2); // 6px
 
-    // Text box: moved 4mm right to x = 0px, left-aligned text
-    const textX = 0;
-    const textWidth = qrX - 8 - textX; // 220 - 8 - 0 = 212px
+    // Text box: moved another 2mm right to x = 16px, width = 196px
+    const textX = 16;
+    const textWidth = qrX - 8 - textX; // 220 - 8 - 16 = 196px
 
     const lines = formattedText.split("\n");
     const lineCount = Math.min(lines.length, 3);
     const estimatedTextHeight = fontSize + (lineCount - 1) * (fontSize * 1.2);
     const textY = Math.max(4, Math.round((heightPx - estimatedTextHeight) / 2));
+    const textHeight = Math.round(estimatedTextHeight + 4);
+
+    if (border) {
+      elements.push({
+        id: randomUUID(),
+        type: "rect",
+        x: textX,
+        y: textY,
+        width: textWidth,
+        height: textHeight,
+        rotation: 0,
+        props: {
+          shapeType: "rect",
+          fill: "none",
+          stroke: "#000000",
+          strokeWidth: 1,
+        },
+      });
+    }
 
     elements.push({
       id: randomUUID(),
@@ -48,7 +69,7 @@ export function generateQrLabelTemplate(options: CreateLabelOptions) {
       x: textX,
       y: textY,
       width: textWidth,
-      height: heightPx - 8,
+      height: textHeight,
       rotation: 0,
       props: {
         text: formattedText,
@@ -77,13 +98,32 @@ export function generateQrLabelTemplate(options: CreateLabelOptions) {
     });
   } else {
     // Full width text
-    const textX = 0;
+    const textX = 16;
     const textWidth = widthPx - textX;
 
     const lines = formattedText.split("\n");
     const lineCount = Math.min(lines.length, 3);
     const estimatedTextHeight = fontSize + (lineCount - 1) * (fontSize * 1.2);
     const textY = Math.max(4, Math.round((heightPx - estimatedTextHeight) / 2));
+    const textHeight = Math.round(estimatedTextHeight + 4);
+
+    if (border) {
+      elements.push({
+        id: randomUUID(),
+        type: "rect",
+        x: textX,
+        y: textY,
+        width: textWidth,
+        height: textHeight,
+        rotation: 0,
+        props: {
+          shapeType: "rect",
+          fill: "none",
+          stroke: "#000000",
+          strokeWidth: 1,
+        },
+      });
+    }
 
     elements.push({
       id: randomUUID(),
@@ -91,7 +131,7 @@ export function generateQrLabelTemplate(options: CreateLabelOptions) {
       x: textX,
       y: textY,
       width: textWidth,
-      height: heightPx - 8,
+      height: textHeight,
       rotation: 0,
       props: {
         text: formattedText,
