@@ -3,7 +3,7 @@ import * as path from "node:path";
 import type { Command } from "commander";
 import chalk from "chalk";
 import ora from "ora";
-import { generateQrLabelTemplate } from "../../render/label-generator.js";
+import { generateQrLabelTemplate, formatLabelPreview } from "../../render/label-generator.js";
 import { renderTemplate, renderTemplatePng } from "../../render/template-renderer.js";
 import { loadImage, trimImage } from "../../image/load.js";
 import { processImage, L11Protocol, type DitherMode } from "@thermoprint/core";
@@ -17,7 +17,7 @@ export function registerLabelCommands(program: Command): void {
     .argument("<text>", "Label text to print (use \\n for line breaks)")
     .option("-q, --qr <content>", "QR code content (defaults to label text)")
     .option("--no-qr", "disable QR code on label")
-    .option("-a, --address <mac>", "target printer BLE MAC address (e.g. 03:0D:7A:D6:5E:B1)")
+    .option("-a, --address <mac>", "target printer BLE MAC address")
     .option("-p, --printer <name>", "target printer name")
     .option("-o, --out <path>", "save generated JSON template to file")
     .option("--font-size <px>", "font size in px", "22")
@@ -33,7 +33,11 @@ export function registerLabelCommands(program: Command): void {
     .option("--json", "output generated template or result as JSON")
     .action(async (textArg: string, opts) => {
       const config = loadConfig();
-      const printerAddress = opts.address;
+      const printerAddress =
+        opts.address ??
+        config.defaultAddress ??
+        process.env.THERMOPRINT_ADDRESS ??
+        "03:0D:7A:D6:5E:B1";
       const widthMm = parseFloat(opts.widthMm) || 40;
       const heightMm = parseFloat(opts.heightMm) || 12;
       const fontSize = parseInt(opts.fontSize) || 22;
@@ -47,6 +51,12 @@ export function registerLabelCommands(program: Command): void {
         showQr: opts.qr !== false,
         border: !!opts.border,
       });
+
+      if (!opts.json) {
+        console.log();
+        console.log(formatLabelPreview(textArg, opts.qr !== false));
+        console.log();
+      }
 
       if (template.warnings && template.warnings.length > 0 && !opts.json) {
         for (const w of template.warnings) {

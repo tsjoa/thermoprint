@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import chalk from "chalk";
 
 export interface CreateLabelOptions {
   text: string;
@@ -8,6 +9,29 @@ export interface CreateLabelOptions {
   fontSize?: number;
   showQr?: boolean;
   border?: boolean;
+}
+
+/**
+ * Format a terminal ASCII box preview of the label in cyan text.
+ */
+export function formatLabelPreview(text: string, showQr = true): string {
+  const lines = text.replace(/\\n/g, "\n").split("\n").slice(0, 3);
+
+  const line1 = (lines[0] || "").padEnd(25).slice(0, 25);
+  const line2 = (lines[1] || "").padEnd(25).slice(0, 25);
+  const line3 = (lines[2] || "").padEnd(25).slice(0, 25);
+
+  const qrBox = showQr
+    ? ["┌──────┐", "│  QR  │", "└──────┘"]
+    : ["        ", "        ", "        "];
+
+  const top  = "┌──────────────────────────────────────────┐";
+  const row1 = `│ ${line1}  ${qrBox[0]}  │`;
+  const row2 = `│ ${line2}  ${qrBox[1]}  │`;
+  const row3 = `│ ${line3}  ${qrBox[2]}  │`;
+  const bot  = "└──────────────────────────────────────────┘";
+
+  return chalk.cyan([top, row1, row2, row3, bot].join("\n"));
 }
 
 /**

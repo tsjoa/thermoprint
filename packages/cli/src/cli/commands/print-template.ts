@@ -70,7 +70,11 @@ export function registerPrintTemplateCommands(program: Command): void {
       const timeout = parseInt(opts.timeout) || config.timeout || 5000;
       const printWidth = parseInt(opts.width) || config.width || 384;
       const printerName = opts.printer ?? config.defaultPrinter;
-      const printerAddress = opts.address ?? config.defaultAddress;
+      const printerAddress =
+        opts.address ??
+        config.defaultAddress ??
+        process.env.THERMOPRINT_ADDRESS ??
+        "03:0D:7A:D6:5E:B1";
       const spinner = opts.json ? null : ora("Reading template...").start();
 
       try {

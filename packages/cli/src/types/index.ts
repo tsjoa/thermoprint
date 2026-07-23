@@ -8,7 +8,8 @@ export interface Config {
 }
 
 export const DEFAULT_CONFIG: Config = {
-  density: 2,
+  defaultAddress: "03:0D:7A:D6:5E:B1",
+  density: 3,
   paperType: "gap",
   timeout: 5000,
   width: 384,
