@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import * as readline from "node:readline";
 import type { Command } from "commander";
 import chalk from "chalk";
 import ora from "ora";
@@ -9,6 +10,19 @@ import { loadImage, trimImage } from "../../image/load.js";
 import { processImage, L11Protocol, type DitherMode } from "@thermoprint/core";
 import { BluepyBleTransport } from "../../transport/bluepy.js";
 import { loadConfig } from "../../store/config.js";
+
+function promptQuestion(query: string): Promise<string> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  return new Promise((resolve) => {
+    rl.question(query, (ans) => {
+      rl.close();
+      resolve(ans.trim());
+    });
+  });
+}
 
 export function registerLabelCommands(program: Command): void {
   program
@@ -28,6 +42,8 @@ export function registerLabelCommands(program: Command): void {
     .option("--dither <mode>", "dithering: floyd-steinberg, threshold, none")
     .option("--threshold <0-255>", "binarization cutoff")
     .option("-b, --border", "print fine outline border around text box")
+    .option("-i, --interactive", "pause and prompt to review/edit text before printing")
+    .option("-y, --yes", "print immediately without confirmation prompt")
     .option("--save-image <path>", "save rendered PNG to file")
     .option("--dry-run", "generate/render only, do not print")
     .option("--json", "output generated template or result as JSON")
@@ -42,8 +58,69 @@ export function registerLabelCommands(program: Command): void {
       const heightMm = parseFloat(opts.heightMm) || 12;
       const fontSize = parseInt(opts.fontSize) || 22;
 
+      let currentText = textArg;
+
+      // Determine if we should run interactive edit/confirmation loop
+      const shouldPrompt =
+        !opts.json &&
+        !opts.dryRun &&
+        (opts.interactive || (process.stdin.isTTY && !opts.yes));
+
+      if (shouldPrompt) {
+        while (true) {
+          console.log();
+          console.log(formatLabelPreview(currentText, opts.qr !== false));
+          console.log();
+
+          const tempTemplate = generateQrLabelTemplate({
+            text: currentText,
+            qrContent: opts.qr,
+            widthMm,
+            heightMm,
+            fontSize,
+            showQr: opts.qr !== false,
+            border: !!opts.border,
+          });
+
+          if (tempTemplate.warnings && tempTemplate.warnings.length > 0) {
+            for (const w of tempTemplate.warnings) {
+              console.warn(chalk.yellow(`⚠️  Warning: ${w}`));
+            }
+          }
+
+          const answer = await promptQuestion(
+            chalk.bold("Print label? [Y/e(dit)/n(o)]: "),
+          );
+
+          if (answer.toLowerCase() === "e" || answer.toLowerCase() === "edit") {
+            const newText = await promptQuestion(
+              chalk.bold("Enter new label text (use \\n for line breaks): "),
+            );
+            if (newText) {
+              currentText = newText;
+            }
+            continue;
+          } else if (
+            answer.toLowerCase() === "n" ||
+            answer.toLowerCase() === "no" ||
+            answer.toLowerCase() === "q" ||
+            answer.toLowerCase() === "cancel"
+          ) {
+            console.log(chalk.yellow("Print cancelled."));
+            process.exit(0);
+          } else {
+            // Y / Enter -> proceed to print
+            break;
+          }
+        }
+      } else if (!opts.json) {
+        console.log();
+        console.log(formatLabelPreview(currentText, opts.qr !== false));
+        console.log();
+      }
+
       const template = generateQrLabelTemplate({
-        text: textArg,
+        text: currentText,
         qrContent: opts.qr,
         widthMm,
         heightMm,
@@ -52,13 +129,7 @@ export function registerLabelCommands(program: Command): void {
         border: !!opts.border,
       });
 
-      if (!opts.json) {
-        console.log();
-        console.log(formatLabelPreview(textArg, opts.qr !== false));
-        console.log();
-      }
-
-      if (template.warnings && template.warnings.length > 0 && !opts.json) {
+      if (!shouldPrompt && template.warnings && template.warnings.length > 0 && !opts.json) {
         for (const w of template.warnings) {
           console.warn(chalk.yellow(`⚠️  Warning: ${w}`));
         }
