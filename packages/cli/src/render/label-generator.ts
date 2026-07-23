@@ -25,21 +25,18 @@ export function generateQrLabelTemplate(options: CreateLabelOptions) {
   const widthPx = Math.round(widthMm * 8); // 320px
   const heightPx = Math.round(heightMm * 8); // 96px
 
-  // Printer feed offset shift (~32px / 4mm) to align physical paper edges
-  const feedShiftX = 32;
-
   const elements: any[] = [];
 
   if (showQr) {
-    // QR code: 76px x 76px (9.5mm), centered vertically at y = 10px
-    // Positioned 32px before right edge of canvas to leave 0.5mm physical margin
-    const qrSize = 76;
-    const qrX = widthPx - feedShiftX - qrSize; // 320 - 32 - 76 = 212px
-    const qrY = Math.round((heightPx - qrSize) / 2); // 10px
+    // QR code: larger size (84px / 10.5mm), y = 6px (vertically centered)
+    // qrX = 220px (leaves 0.5mm physical right margin)
+    const qrSize = 84;
+    const qrX = 220;
+    const qrY = Math.round((heightPx - qrSize) / 2); // 6px
 
-    // Text box: left offset -16px, width 220px to center text within physical left margin & QR code
-    const textX = -16;
-    const textWidth = qrX - 8 - textX; // 212 - 8 - (-16) = 220px
+    // Text box: left offset -32px (2mm further left), width 220px, left-aligned text
+    const textX = -32;
+    const textWidth = qrX - 8 - textX; // 220 - 8 - (-32) = 244px
 
     const lines = formattedText.split("\n");
     const lineCount = Math.min(lines.length, 3);
@@ -61,7 +58,7 @@ export function generateQrLabelTemplate(options: CreateLabelOptions) {
         fontWeight: 600,
         letterSpacing: 0,
         fill: "#000000",
-        align: "center",
+        align: "left",
         italic: false,
       },
     });
@@ -81,8 +78,8 @@ export function generateQrLabelTemplate(options: CreateLabelOptions) {
     });
   } else {
     // Full width text
-    const textX = -16;
-    const textWidth = widthPx - feedShiftX - textX;
+    const textX = -32;
+    const textWidth = widthPx - textX;
 
     const lines = formattedText.split("\n");
     const lineCount = Math.min(lines.length, 3);
@@ -104,7 +101,7 @@ export function generateQrLabelTemplate(options: CreateLabelOptions) {
         fontWeight: 600,
         letterSpacing: 0,
         fill: "#000000",
-        align: "center",
+        align: "left",
         italic: false,
       },
     });

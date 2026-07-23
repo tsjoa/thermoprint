@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Utility script to generate label JSON templates (matching example_with_qrcode.json format)
-with automatic text and QR code placement, exact 0.5mm margins, and 3-line support.
+with automatic text and QR code placement, exact 0.5mm margins, left-aligned text, and 3-line support.
 """
 
 import json
@@ -16,16 +16,14 @@ def generate_label(text, qr_content=None, width_mm=40, height_mm=12, font_size=2
     width_px = int(width_mm * 8) # 320px
     height_px = int(height_mm * 8) # 96px
 
-    feed_shift_x = 32 # 4mm feed shift compensating for physical paper offset
-
     elements = []
     if show_qr:
-        qr_size = 76
-        qr_x = width_px - feed_shift_x - qr_size # 212px
-        qr_y = max(4, (height_px - qr_size) // 2) # 10px
+        qr_size = 84
+        qr_x = 220
+        qr_y = max(4, (height_px - qr_size) // 2) # 6px
 
-        text_x = -16
-        text_width = qr_x - 8 - text_x # 220px
+        text_x = -32
+        text_width = qr_x - 8 - text_x # 244px
 
         lines = formatted_text.split('\n')
         line_count = min(len(lines), 3)
@@ -47,7 +45,7 @@ def generate_label(text, qr_content=None, width_mm=40, height_mm=12, font_size=2
                 "fontWeight": 600,
                 "letterSpacing": 0,
                 "fill": "#000000",
-                "align": "center",
+                "align": "left",
                 "italic": False
             }
         })
@@ -65,8 +63,8 @@ def generate_label(text, qr_content=None, width_mm=40, height_mm=12, font_size=2
             }
         })
     else:
-        text_x = -16
-        text_width = width_px - feed_shift_x - text_x
+        text_x = -32
+        text_width = width_px - text_x
         lines = formatted_text.split('\n')
         line_count = min(len(lines), 3)
         estimated_text_height = font_size + (line_count - 1) * (font_size * 1.2)
@@ -87,7 +85,7 @@ def generate_label(text, qr_content=None, width_mm=40, height_mm=12, font_size=2
                 "fontWeight": 600,
                 "letterSpacing": 0,
                 "fill": "#000000",
-                "align": "center",
+                "align": "left",
                 "italic": False
             }
         })
