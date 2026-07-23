@@ -25,11 +25,11 @@ export function formatLabelPreview(text: string, showQr = true): string {
     ? ["┌──────┐", "│  QR  │", "└──────┘"]
     : ["        ", "        ", "        "];
 
-  const top  = "┌──────────────────────────────────────────┐";
-  const row1 = `│ ${line1}  ${qrBox[0]}  │`;
-  const row2 = `│ ${line2}  ${qrBox[1]}  │`;
-  const row3 = `│ ${line3}  ${qrBox[2]}  │`;
-  const bot  = "└──────────────────────────────────────────┘";
+  const top  = "┌─────────────────────────────────────────┐";
+  const row1 = `│ ${line1}   ${qrBox[0]}  │`;
+  const row2 = `│ ${line2}   ${qrBox[1]}  │`;
+  const row3 = `│ ${line3}   ${qrBox[2]}  │`;
+  const bot  = "└─────────────────────────────────────────┘";
 
   return chalk.cyan([top, row1, row2, row3, bot].join("\n"));
 }
