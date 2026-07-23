@@ -22,31 +22,29 @@ export function generateQrLabelTemplate(options: CreateLabelOptions) {
   const formattedText = text.replace(/\\n/g, "\n");
   const qrContent = options.qrContent || formattedText.replace(/\n/g, " ");
 
-  const marginMm = 0.5;
-  const marginPx = Math.round(marginMm * 8); // 4px margin (0.5mm)
-
   const widthPx = Math.round(widthMm * 8); // 320px
   const heightPx = Math.round(heightMm * 8); // 96px
 
-  const availableH = heightPx - marginPx * 2; // 88px (11mm)
+  // Printer feed offset shift (~32px / 4mm) to align physical paper edges
+  const feedShiftX = 32;
 
   const elements: any[] = [];
 
   if (showQr) {
-    // QR code: 88px x 88px, exactly 0.5mm (4px) from top, bottom, and right edges
-    const qrSize = availableH; // 88px
-    const qrX = widthPx - marginPx - qrSize; // 320 - 4 - 88 = 228px
-    const qrY = marginPx; // 4px (0.5mm top margin)
+    // QR code: 76px x 76px (9.5mm), centered vertically at y = 10px
+    // Positioned 32px before right edge of canvas to leave 0.5mm physical margin
+    const qrSize = 76;
+    const qrX = widthPx - feedShiftX - qrSize; // 320 - 32 - 76 = 212px
+    const qrY = Math.round((heightPx - qrSize) / 2); // 10px
 
-    // Text box: left margin 4px (0.5mm), width 220px, 4px gap before QR code
-    const gapPx = 4;
-    const textX = marginPx; // 4px (0.5mm left margin)
-    const textWidth = qrX - gapPx - textX; // 228 - 4 - 4 = 220px
+    // Text box: left offset -16px, width 220px to center text within physical left margin & QR code
+    const textX = -16;
+    const textWidth = qrX - 8 - textX; // 212 - 8 - (-16) = 220px
 
     const lines = formattedText.split("\n");
     const lineCount = Math.min(lines.length, 3);
     const estimatedTextHeight = fontSize + (lineCount - 1) * (fontSize * 1.2);
-    const textY = Math.max(marginPx, Math.round((heightPx - estimatedTextHeight) / 2));
+    const textY = Math.max(4, Math.round((heightPx - estimatedTextHeight) / 2));
 
     elements.push({
       id: randomUUID(),
@@ -54,7 +52,7 @@ export function generateQrLabelTemplate(options: CreateLabelOptions) {
       x: textX,
       y: textY,
       width: textWidth,
-      height: availableH,
+      height: heightPx - 8,
       rotation: 0,
       props: {
         text: formattedText,
@@ -82,14 +80,14 @@ export function generateQrLabelTemplate(options: CreateLabelOptions) {
       },
     });
   } else {
-    // Full width text with 0.5mm margins
-    const textX = marginPx;
-    const textWidth = widthPx - marginPx * 2;
+    // Full width text
+    const textX = -16;
+    const textWidth = widthPx - feedShiftX - textX;
 
     const lines = formattedText.split("\n");
     const lineCount = Math.min(lines.length, 3);
     const estimatedTextHeight = fontSize + (lineCount - 1) * (fontSize * 1.2);
-    const textY = Math.max(marginPx, Math.round((heightPx - estimatedTextHeight) / 2));
+    const textY = Math.max(4, Math.round((heightPx - estimatedTextHeight) / 2));
 
     elements.push({
       id: randomUUID(),
@@ -97,7 +95,7 @@ export function generateQrLabelTemplate(options: CreateLabelOptions) {
       x: textX,
       y: textY,
       width: textWidth,
-      height: availableH,
+      height: heightPx - 8,
       rotation: 0,
       props: {
         text: formattedText,

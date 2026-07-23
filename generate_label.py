@@ -13,27 +13,24 @@ def generate_label(text, qr_content=None, width_mm=40, height_mm=12, font_size=2
     formatted_text = text.replace('\\n', '\n')
     qr_text = qr_content if qr_content else formatted_text.replace('\n', ' ')
 
-    margin_mm = 0.5
-    margin_px = int(margin_mm * 8) # 4px margin (0.5mm)
-
     width_px = int(width_mm * 8) # 320px
     height_px = int(height_mm * 8) # 96px
-    available_h = height_px - margin_px * 2 # 88px (11mm)
+
+    feed_shift_x = 32 # 4mm feed shift compensating for physical paper offset
 
     elements = []
     if show_qr:
-        qr_size = available_h # 88px
-        qr_x = width_px - margin_px - qr_size # 320 - 4 - 88 = 228px
-        qr_y = margin_px # 4px (0.5mm top margin)
+        qr_size = 76
+        qr_x = width_px - feed_shift_x - qr_size # 212px
+        qr_y = max(4, (height_px - qr_size) // 2) # 10px
 
-        gap_px = 4
-        text_x = margin_px # 4px (0.5mm left margin)
-        text_width = qr_x - gap_px - text_x # 220px
+        text_x = -16
+        text_width = qr_x - 8 - text_x # 220px
 
         lines = formatted_text.split('\n')
         line_count = min(len(lines), 3)
         estimated_text_height = font_size + (line_count - 1) * (font_size * 1.2)
-        text_y = max(margin_px, int((height_px - estimated_text_height) // 2))
+        text_y = max(4, int((height_px - estimated_text_height) // 2))
 
         elements.append({
             "id": str(uuid.uuid4()),
@@ -41,7 +38,7 @@ def generate_label(text, qr_content=None, width_mm=40, height_mm=12, font_size=2
             "x": text_x,
             "y": text_y,
             "width": text_width,
-            "height": available_h,
+            "height": height_px - 8,
             "rotation": 0,
             "props": {
                 "text": formatted_text,
@@ -68,12 +65,12 @@ def generate_label(text, qr_content=None, width_mm=40, height_mm=12, font_size=2
             }
         })
     else:
-        text_x = margin_px
-        text_width = width_px - margin_px * 2
+        text_x = -16
+        text_width = width_px - feed_shift_x - text_x
         lines = formatted_text.split('\n')
         line_count = min(len(lines), 3)
         estimated_text_height = font_size + (line_count - 1) * (font_size * 1.2)
-        text_y = max(margin_px, int((height_px - estimated_text_height) // 2))
+        text_y = max(4, int((height_px - estimated_text_height) // 2))
 
         elements.append({
             "id": str(uuid.uuid4()),
@@ -81,7 +78,7 @@ def generate_label(text, qr_content=None, width_mm=40, height_mm=12, font_size=2
             "x": text_x,
             "y": text_y,
             "width": text_width,
-            "height": available_h,
+            "height": height_px - 8,
             "rotation": 0,
             "props": {
                 "text": formatted_text,
