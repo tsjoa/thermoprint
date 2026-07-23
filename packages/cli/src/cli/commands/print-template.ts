@@ -16,6 +16,7 @@ import type { BlePeripheral, PrintOptions, DitherMode } from "@thermoprint/core"
 import { NobleBleTransport } from "../../transport/noble.js";
 import { BluepyBleTransport } from "../../transport/bluepy.js";
 import { renderTemplate, renderTemplatePng } from "../../render/template-renderer.js";
+import { trimImage } from "../../image/load.js";
 import { loadConfig } from "../../store/config.js";
 
 async function readStdin(): Promise<string> {
@@ -129,9 +130,10 @@ export function registerPrintTemplateCommands(program: Command): void {
         // Discover printer
         if (spinner) spinner.text = "Discovering printer...";
 
+        const trimmedImage = await trimImage(image);
         const dither = (opts.dither ?? "floyd-steinberg") as DitherMode;
         const thresholdVal = opts.threshold ? parseInt(opts.threshold) : undefined;
-        const bitmap = processImage(image, { dither, threshold: thresholdVal });
+        const bitmap = processImage(trimmedImage, { dither, threshold: thresholdVal });
 
         if (printerAddress) {
           // ---- Bluepy raw path: replicate newprint_withfeed.py exactly ----

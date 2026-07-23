@@ -105,13 +105,17 @@ class BluepySession {
   }> = [];
   private notifyListeners = new Map<number, (data: Uint8Array) => void>();
   private dead = false;
+  private stderrOutput = "";
 
   constructor(helperPath: string) {
     this.proc = spawn(helperPath, [], {
-      stdio: ["pipe", "pipe", "ignore"],
+      stdio: ["pipe", "pipe", "pipe"],
     });
     this.rl = readline.createInterface({ input: this.proc.stdout! });
     this.rl.on("line", (line) => this.handleLine(line));
+    this.proc.stderr?.on("data", (data) => {
+      this.stderrOutput += data.toString();
+    });
     this.proc.on("exit", () => this.handleExit());
   }
 
@@ -166,7 +170,8 @@ class BluepySession {
   private handleExit(): void {
     if (this.dead) return;
     this.dead = true;
-    const err = new Error("bluepy-helper exited");
+    const stderrMsg = this.stderrOutput.trim() ? `: ${this.stderrOutput.trim()}` : "";
+    const err = new Error(`bluepy-helper exited${stderrMsg}`);
     for (const w of this.pending) w.reject(err);
     this.pending = [];
   }
@@ -177,7 +182,10 @@ class BluepySession {
 
   private waitFor(type: string, timeoutMs = 10000): Promise<BluepyResp> {
     return new Promise((resolve, reject) => {
-      if (this.dead) return reject(new Error("bluepy-helper not running"));
+      if (this.dead) {
+        const stderrMsg = this.stderrOutput.trim() ? `: ${this.stderrOutput.trim()}` : "";
+        return reject(new Error(`bluepy-helper not running${stderrMsg}`));
+      }
       const timer = setTimeout(() => {
         const idx = this.pending.findIndex((p) => p.resolve === resolveWrapped);
         if (idx !== -1) this.pending.splice(idx, 1);
@@ -231,9 +239,12 @@ class BluepySession {
 
   async write(valueHandle: number, data: Uint8Array, withResponse: boolean): Promise<void> {
     const hex = Buffer.from(data).toString("hex");
-    const cmd = withResponse ? "wrr" : "wr";
-    this.send(`${cmd} ${valueHandle.toString(16)} ${hex}`);
-    await this.waitFor("wr", 5000);
+    if (withResponse) {
+      this.send(`wrr ${valueHandle.toString(16)} ${hex}`);
+      await this.waitFor("wrr", 5000);
+    } else {
+      this.send(`wr ${valueHandle.toString(16)} ${hex}`);
+    }
   }
 
   onNotify(valueHandle: number, listener: (data: Uint8Array) => void): void {

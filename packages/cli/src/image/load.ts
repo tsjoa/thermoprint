@@ -39,3 +39,33 @@ export async function loadImage(
     height: info.height,
   };
 }
+
+/**
+ * Trim whitespace from RGBA image so we only send the content area to the printer.
+ * Height is padded to a multiple of 8 (required by column-major bitmap encoding).
+ */
+export async function trimImage(image: RawImageData): Promise<RawImageData> {
+  try {
+    const { data: trimBuf, info } = await sharp(Buffer.from(image.data), {
+      raw: { width: image.width, height: image.height, channels: 4 },
+    })
+      .trim()
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    // Pad height to multiple of 8 (required by column-major encoding)
+    const paddedH = Math.ceil(info.height / 8) * 8;
+    if (paddedH !== info.height) {
+      const padded = new Uint8Array(info.width * paddedH * 4);
+      padded.fill(255); // white
+      padded.set(trimBuf);
+      return { data: padded, width: info.width, height: paddedH };
+    }
+
+    return { data: new Uint8Array(trimBuf), width: info.width, height: info.height };
+  } catch {
+    return image;
+  }
+}
+

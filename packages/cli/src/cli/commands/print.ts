@@ -11,8 +11,10 @@ import {
 } from "@thermoprint/core";
 import type { BlePeripheral, PrintOptions, DitherMode } from "@thermoprint/core";
 import { NobleBleTransport } from "../../transport/noble.js";
-import { loadImage } from "../../image/load.js";
+import { BluepyBleTransport } from "../../transport/bluepy.js";
+import { loadImage, trimImage } from "../../image/load.js";
 import { loadConfig } from "../../store/config.js";
+import { processImage, L11Protocol } from "@thermoprint/core";
 
 async function findPrinter(
   transport: NobleBleTransport,
@@ -38,6 +40,7 @@ export function registerPrintCommands(program: Command): void {
     .description("Print an image file to a thermal printer")
     .argument("<image>", "path to image file (PNG, JPEG, BMP, WebP)")
     .option("-p, --printer <name>", "target printer by name")
+    .option("-a, --address <mac>", "connect directly by BLE address (e.g. 03:0D:7A:D6:5E:B1)")
     .option("-d, --density <1-3>", "print density")
     .option("--paper <type>", "paper type: gap or continuous")
     .option("--dither <mode>", "dithering: floyd-steinberg, threshold, none")
@@ -59,26 +62,75 @@ export function registerPrintCommands(program: Command): void {
 
       const config = loadConfig();
       const timeout = parseInt(opts.timeout) || config.timeout || 5000;
-      const transport = new NobleBleTransport();
+      const printerAddress = opts.address;
       const printerName = opts.printer ?? config.defaultPrinter;
 
       const spinner = opts.json ? null : ora("Discovering printer...").start();
 
       try {
-        // Discover printer
+        const printWidth = parseInt(opts.width) || config.width || 384;
+        const image = await loadImage(imagePath, printWidth, { rotate: opts.rotate });
+
+        if (printerAddress) {
+          // ---- Bluepy raw path for MAC connection ----
+          const transport = new BluepyBleTransport();
+          if (spinner) spinner.text = `Connecting to ${printerAddress} via bluepy...`;
+          const conn = await transport.connect({
+            id: printerAddress,
+            name: "",
+            rssi: -100,
+            serviceUuids: ["e7810a7173ae499d8c15faa9aef0c3f2"],
+          });
+
+          const svc = await conn.discoverService("0000ff00-0000-1000-8000-00805f9b34fb");
+          if (!svc) throw new Error("Service ff00 not found");
+          const tx = await svc.getCharacteristic("0000ff02-0000-1000-8000-00805f9b34fb");
+          if (!tx) throw new Error("TX characteristic ff02 not found");
+
+          const trimmedImage = await trimImage(image);
+          const dither = (opts.dither ?? "floyd-steinberg") as DitherMode;
+          const thresholdVal = opts.threshold ? parseInt(opts.threshold) : undefined;
+          const bitmap = processImage(trimmedImage, { dither, threshold: thresholdVal });
+
+          const protocol = new L11Protocol();
+          const paperType = (opts.paper ?? config.paperType ?? "gap") as "gap" | "continuous";
+          const density = opts.density ? parseInt(opts.density) : config.density;
+          const commands = protocol.buildPrintSequence(bitmap, { density, paperType });
+
+          const totalLen = commands.reduce((s, c) => s + c.data.length, 0);
+          const allBytes = new Uint8Array(totalLen);
+          let off = 0;
+          for (const cmd of commands) {
+            allBytes.set(cmd.data, off);
+            off += cmd.data.length;
+          }
+
+          if (spinner) spinner.text = "Printing...";
+          const CHUNK = 96;
+          for (let i = 0; i < allBytes.length; i += CHUNK) {
+            const chunk = allBytes.subarray(i, Math.min(i + CHUNK, allBytes.length));
+            await tx.write(chunk, true);
+            await new Promise((r) => setTimeout(r, 30));
+          }
+
+          await conn.disconnect();
+
+          if (opts.json) {
+            console.log(JSON.stringify({ status: "success" }));
+          } else {
+            spinner?.succeed(chalk.green("Print complete!"));
+          }
+          process.exit(0);
+        }
+
+        const transport = new NobleBleTransport();
         const peripheral = await findPrinter(transport, printerName, timeout);
         const profile = findDeviceByName(peripheral.name);
-        const printWidth = parseInt(opts.width) || config.width || 384;
 
         if (spinner) spinner.text = `Connecting to ${peripheral.name}...`;
 
         // Connect
         const printer = await Printer.connect(transport, peripheral);
-
-        if (spinner) spinner.text = "Loading image...";
-
-        // Load image
-        const image = await loadImage(imagePath, printWidth, { rotate: opts.rotate });
 
         // Build print options
         const printOpts: PrintOptions = {};

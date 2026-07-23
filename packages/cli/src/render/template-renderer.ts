@@ -6,6 +6,8 @@ import { buildSvg } from "./svg-builder.js";
 export interface RenderOptions {
   /** Print head width in px — used for rotation + centering. Default 384. */
   printWidth?: number;
+  /** Rotate 90° CW for row-major printers. Default false (unrotated for column-major P15/L11). */
+  rotate?: boolean;
 }
 
 /**
@@ -15,13 +17,13 @@ export interface RenderOptions {
  * 1. Normalize the template (simplified or full format)
  * 2. Build an SVG string from the elements
  * 3. Rasterize SVG via sharp (librsvg)
- * 4. Rotate 90° CW and pad to printWidth (same as web editor export)
+ * 4. Return unrotated image by default (for column-major P15/L11 printers), or rotate 90° CW if requested.
  */
 export async function renderTemplate(
   input: string | object,
   options: RenderOptions = {},
 ): Promise<RawImageData> {
-  const { printWidth = 384 } = options;
+  const { printWidth = 384, rotate = false } = options;
 
   // 1. Normalize
   const { elements, labelConfig } = normalizeTemplate(input);
@@ -37,6 +39,14 @@ export async function renderTemplate(
 
   const labelW = info.width;
   const labelH = info.height;
+
+  if (!rotate) {
+    return {
+      data: new Uint8Array(rawBuf.buffer, rawBuf.byteOffset, rawBuf.byteLength),
+      width: labelW,
+      height: labelH,
+    };
+  }
 
   // 4. Rotate 90° CW: (x,y) → (y, labelW-1-x)
   //    After rotation: width = labelH, height = labelW

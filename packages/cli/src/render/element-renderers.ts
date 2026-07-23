@@ -44,10 +44,10 @@ export function renderText(el: EditorElement): string {
     dx = el.width;
   }
 
-  let fontWeight = "normal";
+  let fontWeight = (props as any).fontWeight ? String((props as any).fontWeight) : "normal";
   let fontStyle = "normal";
-  if (props.fontStyle.includes("bold")) fontWeight = "bold";
-  if (props.fontStyle.includes("italic")) fontStyle = "italic";
+  if (props.fontStyle && props.fontStyle.includes("bold")) fontWeight = "bold";
+  if (props.fontStyle && props.fontStyle.includes("italic")) fontStyle = "italic";
 
   const tspans = lines
     .map(
