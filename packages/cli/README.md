@@ -15,15 +15,33 @@ CLI for Bluetooth thermal printers. Discover, print, and manage thermal label pr
 ## Installation
 
 ```bash
-# Clone and install from source
+# Clone and install dependencies
 git clone <repo-url>
 cd thermoprint
 bun install
 
-# Link globally
+# Link globally so 'thermoprint' executable is available in PATH
 cd packages/cli
 bun link
 ```
+
+### Global Executable Linking & Unlinking
+
+- **How it works**:
+  `packages/cli/package.json` defines `"bin": { "thermoprint": "src/index.ts" }`. Running `bun link` creates a global symlink in `~/.bun/bin/thermoprint` pointing to `packages/cli/src/index.ts` (which has `#!/usr/bin/env bun`). Since `~/.bun/bin` is in your `PATH`, `thermoprint` is available anywhere in terminal.
+
+- **To repeat on another system**:
+  ```bash
+  cd thermoprint/packages/cli
+  bun link
+  ```
+
+- **To undo (unlink) the global executable**:
+  ```bash
+  cd thermoprint/packages/cli
+  bun unlink
+  ```
+  *Alternative manual removal:* `rm -f ~/.bun/bin/thermoprint`
 
 ## Quick Start
 

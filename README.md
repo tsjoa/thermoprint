@@ -116,12 +116,17 @@ Open **[tomladder.github.io/thermoprint](https://tomladder.github.io/thermoprint
 git clone https://github.com/tomLadder/thermoprint.git && cd thermoprint
 bun install
 
-# Discover printers (requires Bluetooth)
-bun run packages/cli/src/index.ts discover
+# Link executable globally (makes 'thermoprint' command available anywhere)
+cd packages/cli && bun link
 
-# Print an image
-bun run packages/cli/src/index.ts print my-label.png
+# Discover printers (requires Bluetooth)
+thermoprint discover
+
+# Print a text + QR code label directly
+thermoprint label "RELAY-16CH\n12V MODULE\nREV 2.0" -a 03:0D:7A:D6:5E:B1
 ```
+
+*To undo global linking later:* `cd packages/cli && bun unlink` (or `rm ~/.bun/bin/thermoprint`).
 
 ### From Release Binaries
 
