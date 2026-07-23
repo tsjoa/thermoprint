@@ -25,27 +25,27 @@ export function generateQrLabelTemplate(options: CreateLabelOptions) {
   const marginMm = 0.5;
   const marginPx = Math.round(marginMm * 8); // 4px margin (0.5mm)
 
-  const widthPx = Math.round(widthMm * 8); // e.g. 40 * 8 = 320
-  const heightPx = Math.round(heightMm * 8); // e.g. 12 * 8 = 96
+  const widthPx = Math.round(widthMm * 8); // 320px
+  const heightPx = Math.round(heightMm * 8); // 96px
 
-  const availableH = heightPx - marginPx * 2; // 88px
+  const availableH = heightPx - marginPx * 2; // 88px (11mm)
 
   const elements: any[] = [];
 
   if (showQr) {
-    // QR code: aligned to right margin (0.5mm / 4px from right)
-    const qrSize = Math.min(84, availableH); // 84px size
-    const qrX = widthPx - marginPx - qrSize; // 320 - 4 - 84 = 232px
-    const qrY = Math.round((heightPx - qrSize) / 2); // 6px (centered vertically with >0.5mm margin)
+    // QR code: 88px x 88px, exactly 0.5mm (4px) from top, bottom, and right edges
+    const qrSize = availableH; // 88px
+    const qrX = widthPx - marginPx - qrSize; // 320 - 4 - 88 = 228px
+    const qrY = marginPx; // 4px (0.5mm top margin)
 
-    // Text box: left margin 4px (0.5mm), extends to gap before QR code
+    // Text box: left margin 4px (0.5mm), width 220px, 4px gap before QR code
     const gapPx = 4;
-    const textX = marginPx; // 4px
-    const textWidth = qrX - gapPx - textX; // 232 - 4 - 4 = 224px
+    const textX = marginPx; // 4px (0.5mm left margin)
+    const textWidth = qrX - gapPx - textX; // 228 - 4 - 4 = 220px
 
     const lines = formattedText.split("\n");
-    const lineCount = lines.length;
-    const estimatedTextHeight = lineCount * (fontSize * 1.15);
+    const lineCount = Math.min(lines.length, 3);
+    const estimatedTextHeight = fontSize + (lineCount - 1) * (fontSize * 1.2);
     const textY = Math.max(marginPx, Math.round((heightPx - estimatedTextHeight) / 2));
 
     elements.push({
@@ -87,8 +87,8 @@ export function generateQrLabelTemplate(options: CreateLabelOptions) {
     const textWidth = widthPx - marginPx * 2;
 
     const lines = formattedText.split("\n");
-    const lineCount = lines.length;
-    const estimatedTextHeight = lineCount * (fontSize * 1.15);
+    const lineCount = Math.min(lines.length, 3);
+    const estimatedTextHeight = fontSize + (lineCount - 1) * (fontSize * 1.2);
     const textY = Math.max(marginPx, Math.round((heightPx - estimatedTextHeight) / 2));
 
     elements.push({

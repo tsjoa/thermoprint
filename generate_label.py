@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Utility script to generate label JSON templates (matching example_with_qrcode.json format)
-with automatic text and QR code placement, 0.5mm margins, and 3-line support.
+with automatic text and QR code placement, exact 0.5mm margins, and 3-line support.
 """
 
 import json
@@ -14,25 +14,25 @@ def generate_label(text, qr_content=None, width_mm=40, height_mm=12, font_size=2
     qr_text = qr_content if qr_content else formatted_text.replace('\n', ' ')
 
     margin_mm = 0.5
-    margin_px = int(margin_mm * 8) # 4px margin
+    margin_px = int(margin_mm * 8) # 4px margin (0.5mm)
 
     width_px = int(width_mm * 8) # 320px
     height_px = int(height_mm * 8) # 96px
-    available_h = height_px - margin_px * 2 # 88px
+    available_h = height_px - margin_px * 2 # 88px (11mm)
 
     elements = []
     if show_qr:
-        qr_size = min(84, available_h)
-        qr_x = width_px - margin_px - qr_size # 320 - 4 - 84 = 232px
-        qr_y = (height_px - qr_size) // 2
+        qr_size = available_h # 88px
+        qr_x = width_px - margin_px - qr_size # 320 - 4 - 88 = 228px
+        qr_y = margin_px # 4px (0.5mm top margin)
 
         gap_px = 4
-        text_x = margin_px # 4px
-        text_width = qr_x - gap_px - text_x # 224px
+        text_x = margin_px # 4px (0.5mm left margin)
+        text_width = qr_x - gap_px - text_x # 220px
 
         lines = formatted_text.split('\n')
-        line_count = len(lines)
-        estimated_text_height = line_count * (font_size * 1.15)
+        line_count = min(len(lines), 3)
+        estimated_text_height = font_size + (line_count - 1) * (font_size * 1.2)
         text_y = max(margin_px, int((height_px - estimated_text_height) // 2))
 
         elements.append({
@@ -71,8 +71,8 @@ def generate_label(text, qr_content=None, width_mm=40, height_mm=12, font_size=2
         text_x = margin_px
         text_width = width_px - margin_px * 2
         lines = formatted_text.split('\n')
-        line_count = len(lines)
-        estimated_text_height = line_count * (font_size * 1.15)
+        line_count = min(len(lines), 3)
+        estimated_text_height = font_size + (line_count - 1) * (font_size * 1.2)
         text_y = max(margin_px, int((height_px - estimated_text_height) // 2))
 
         elements.append({
