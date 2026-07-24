@@ -19,6 +19,12 @@ com.feioou.deliprint.yxq.apk/
 # Test artifacts
 test-label.png
 
+# Python
+__pycache__/
+*.egg-info/
+.venv/
+scratch/
+
 # Config
 .env
 .env.*

@@ -1,0 +1,229 @@
+#!/usr/bin/env python3
+"""
+Thermoprint Cross-Platform CLI
+Command-line tool to discover and print labels on Marklife P12 / P15 / P7 printers via BLE.
+"""
+
+import argparse
+import asyncio
+import os
+import sys
+from PIL import Image
+
+from generate_label import generate_label
+from newprint_withfeed import construct_bitmap, bitmap_to_packet
+from thermoprint_ble import scan_printers, print_bitmap_bleak
+
+
+def cmd_discover(args):
+    """Scan and list nearby BLE thermal printers."""
+    print(f"Scanning for BLE printers ({args.timeout}s)...")
+    printers = asyncio.run(scan_printers(timeout=args.timeout, show_all=args.all))
+
+    if not printers:
+        print("No printers found. Make sure your printer is turned on and Bluetooth is enabled.")
+        sys.exit(0)
+
+    print(f"\nFound {len(printers)} device(s):\n")
+    for p in printers:
+        mark = " [PRINTER]" if p["is_printer"] else ""
+        print(f"  {p['name']:<20} {p['address']:<24} RSSI: {p['rssi']:<5} {p['model']}{mark}")
+    print()
+
+
+DEFAULT_PRINTER_ADDRESS = "5E:55:09:26:72:D3"
+
+
+async def resolve_address(address_arg: str = None) -> str:
+    """Returns explicit address if provided, otherwise default or auto-discover."""
+    if address_arg:
+        return address_arg
+    return DEFAULT_PRINTER_ADDRESS
+
+
+from thermoprint import format_label_preview
+
+def cmd_label(args):
+    """Renders text label and prints over BLE."""
+    current_text = args.text.replace('\\n', '\n') if args.text else ""
+
+    if not current_text and args.interactive:
+        print("\nEnter label text (use \\n for newlines):")
+        try:
+            inp = input("> ").strip()
+            if not inp:
+                print("Cancelled.")
+                sys.exit(0)
+            current_text = inp.replace('\\n', '\n')
+        except (KeyboardInterrupt, EOFError):
+            print("\nCancelled.")
+            sys.exit(0)
+
+    if args.interactive:
+        while True:
+            preview = format_label_preview(current_text, show_qr=not args.no_qr)
+            print("\nLabel Preview:")
+            print(preview)
+            print()
+            print("[Enter] Print  |  [e] Edit text  |  [q/Esc] Cancel")
+            try:
+                choice = input("> ").strip().lower()
+            except (KeyboardInterrupt, EOFError):
+                print("\nCancelled.")
+                sys.exit(0)
+
+            if choice in ("", "y", "p", "print", "yes"):
+                break
+            elif choice == "e":
+                print("\nEnter new text (use \\n for newlines):")
+                try:
+                    new_input = input("> ").strip()
+                    if new_input:
+                        current_text = new_input.replace('\\n', '\n')
+                except (KeyboardInterrupt, EOFError):
+                    print("\nCancelled.")
+                    sys.exit(0)
+            elif choice in ("q", "quit", "exit", "c", "cancel"):
+                print("Cancelled.")
+                sys.exit(0)
+    else:
+        preview = format_label_preview(current_text, show_qr=not args.no_qr)
+        print("\nLabel Preview:")
+        print(preview)
+        print()
+
+    bitmap = construct_bitmap(
+        text=current_text,
+        font_size=args.font_size,
+        font_family=args.font_family,
+        bold=args.bold,
+        italic=args.italic,
+        underline=args.underline,
+        canvas_height=int(args.height_mm * 8),
+        width_mm=args.width_mm,
+        height_mm=args.height_mm,
+        show_qr=not args.no_qr,
+        qr_content=args.qr,
+        border=args.border,
+    )
+
+    payload = bitmap_to_packet(bitmap)
+
+    if args.dry_run:
+        print(f"[DRY-RUN] Rendered bitmap: {bitmap.size[0]}x{bitmap.size[1]} px, {len(payload)} bytes payload.")
+        if args.save_image:
+            bitmap.convert("RGB").save(args.save_image)
+            print(f"[DRY-RUN] Saved preview to {args.save_image}")
+        return
+
+    address = asyncio.run(resolve_address(args.address))
+    print(f"Connecting to printer at {address}...")
+
+    success = asyncio.run(
+        print_bitmap_bleak(
+            address=address,
+            bitmap_payload=payload,
+            canvas_width=bitmap.width,
+            segmented_paper=args.segmented_paper,
+            progress_callback=print,
+        )
+    )
+
+    if success:
+        print("Done!")
+    else:
+        print("Print failed.")
+
+
+def cmd_print_image(args):
+    """Prints an image file directly."""
+    if not os.path.exists(args.file):
+        print(f"Error: File not found: {args.file}")
+        sys.exit(1)
+
+    img = Image.open(args.file).convert('1')
+    payload = bitmap_to_packet(img)
+
+    if args.dry_run:
+        print(f"[DRY-RUN] Image {args.file}: {img.size[0]}x{img.size[1]} px, {len(payload)} bytes payload.")
+        return
+
+    address = asyncio.run(resolve_address(args.address))
+    print(f"Connecting to printer at {address}...")
+
+    asyncio.run(
+        print_bitmap_bleak(
+            address=address,
+            bitmap_payload=payload,
+            canvas_width=img.width,
+            segmented_paper=args.segmented_paper,
+            progress_callback=print,
+        )
+    )
+    print("Done!")
+
+
+from thermoprint_ble import set_shutdown_seconds_bleak
+
+def cmd_power_off(args):
+    """Sets the printer's auto-shutdown timer."""
+    seconds = 0 if args.never else args.seconds
+    address = asyncio.run(resolve_address(args.address))
+    print(f"Connecting to printer at {address}...")
+    sec_desc = "Never (stay on until battery runs out)" if seconds == 0 else f"{seconds} seconds"
+    print(f"Setting auto-power off timer to: {sec_desc}...")
+    asyncio.run(set_shutdown_seconds_bleak(address, seconds=seconds))
+    print("Auto-power off setting updated successfully!")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Thermoprint CLI — Cross-platform Bluetooth thermal printer tool")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    # Discover subcommand
+    p_disc = subparsers.add_parser("discover", help="Scan for nearby BLE thermal printers")
+    p_disc.add_argument("-t", "--timeout", type=float, default=5.0, help="Scan timeout in seconds")
+    p_disc.add_argument("--all", action="store_true", help="Show all BLE devices, not just printers")
+    p_disc.set_defaults(func=cmd_discover)
+
+    # Power-off subcommand
+    p_power = subparsers.add_parser("power-off", help="Configure printer auto-power off timeout")
+    p_power.add_argument("-a", "--address", default=DEFAULT_PRINTER_ADDRESS, help="Printer BLE MAC address")
+    p_power.add_argument("-n", "--never", action="store_true", default=True, help="Keep printer powered on until battery is empty (default)")
+    p_power.add_argument("-s", "--seconds", type=int, default=0, help="Auto-shutdown timeout in seconds (0 = never)")
+    p_power.set_defaults(func=cmd_power_off)
+
+    # Label subcommand
+    p_label = subparsers.add_parser("label", help="Print a text label")
+    p_label.add_argument("text", nargs="?", default="", help="Label text (use \\n for newlines)")
+    p_label.add_argument("-i", "--interactive", action="store_true", help="Interactive prompt menu")
+    p_label.add_argument("-a", "--address", default=DEFAULT_PRINTER_ADDRESS, help="Printer BLE MAC address")
+    p_label.add_argument("-q", "--qr", help="Custom QR code text (defaults to label text)")
+    p_label.add_argument("--no-qr", action="store_true", help="Disable QR code generation")
+    p_label.add_argument("--font-size", type=int, default=None, help="Font size in px (auto-scaled if omitted)")
+    p_label.add_argument("--font-family", type=str, default="Arial")
+    p_label.add_argument("--bold", action="store_true")
+    p_label.add_argument("--italic", action="store_true")
+    p_label.add_argument("--underline", action="store_true")
+    p_label.add_argument("--width-mm", type=float, default=40.0, help="Width in mm (default: 40)")
+    p_label.add_argument("--height-mm", type=float, default=12.0, help="Height in mm (default: 12)")
+    p_label.add_argument("-b", "--border", action="store_true", help="Draw border around label")
+    p_label.add_argument("--segmented-paper", action="store_true")
+    p_label.add_argument("--dry-run", action="store_true", help="Render only, do not send to printer")
+    p_label.add_argument("--save-image", help="Save rendered label as image file")
+    p_label.set_defaults(func=cmd_label)
+
+    # Print subcommand
+    p_print = subparsers.add_parser("print", help="Print an image file")
+    p_print.add_argument("file", help="Path to image file")
+    p_print.add_argument("-a", "--address", help="Printer BLE MAC address (auto-discovers if omitted)")
+    p_print.add_argument("--segmented-paper", action="store_true")
+    p_print.add_argument("--dry-run", action="store_true", help="Render only, do not send to printer")
+    p_print.set_defaults(func=cmd_print_image)
+
+    args = parser.parse_args()
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()

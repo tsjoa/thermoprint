@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 from typing import Any, Dict, Optional
 
 
@@ -17,8 +18,14 @@ class ThermoprintError(Exception):
 
 def format_label_preview(text: str, show_qr: bool = True) -> str:
     """
-    Format a terminal ASCII box preview of the label (matching CLI thermoprint label format).
+    Format a terminal ASCII box preview of the label.
     """
+    try:
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
     cleaned = text.replace('\\n', '\n')
     lines = cleaned.split('\n')[:3]
 
@@ -26,13 +33,23 @@ def format_label_preview(text: str, show_qr: bool = True) -> str:
     line2 = (lines[1] if len(lines) > 1 else "")[:25].ljust(25)
     line3 = (lines[2] if len(lines) > 2 else "")[:25].ljust(25)
 
-    qr_box = ["┌──────┐", "│  QR  │", "└──────┘"] if show_qr else ["        ", "        ", "        "]
+    try:
+        "┌──┐".encode(sys.stdout.encoding or "utf-8")
+        c = {"top_l": "┌", "top_r": "┐", "bot_l": "└", "bot_r": "┘", "h": "─", "v": "│"}
+    except (UnicodeEncodeError, AttributeError, TypeError):
+        c = {"top_l": "+", "top_r": "+", "bot_l": "+", "bot_r": "+", "h": "-", "v": "|"}
 
-    top  = "┌─────────────────────────────────────────┐"
-    row1 = f"│ {line1}   {qr_box[0]}    │"
-    row2 = f"│ {line2}   {qr_box[1]}    │"
-    row3 = f"│ {line3}   {qr_box[2]}    │"
-    bot  = "└─────────────────────────────────────────┘"
+    qr_box = [
+        f"{c['top_l']}{c['h']*6}{c['top_r']}",
+        f"{c['v']}  QR  {c['v']}",
+        f"{c['bot_l']}{c['h']*6}{c['bot_r']}"
+    ] if show_qr else ["        ", "        ", "        "]
+
+    top  = f"{c['top_l']}{c['h']*41}{c['top_r']}"
+    row1 = f"{c['v']} {line1}   {qr_box[0]}    {c['v']}"
+    row2 = f"{c['v']} {line2}   {qr_box[1]}    {c['v']}"
+    row3 = f"{c['v']} {line3}   {qr_box[2]}    {c['v']}"
+    bot  = f"{c['bot_l']}{c['h']*41}{c['bot_r']}"
 
     return "\n".join([top, row1, row2, row3, bot])
 

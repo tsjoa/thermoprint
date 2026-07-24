@@ -12,6 +12,11 @@ import type {
 // Singleton D-Bus connection — BlueZ on Linux, no privileges needed.
 let _bt: ReturnType<typeof createBluetooth> | null = null;
 function getBt() {
+  if (process.platform !== "linux") {
+    throw new Error(
+      `The CLI's Bluetooth transport relies on Linux D-Bus (/var/run/dbus/system_bus_socket) and is not supported on Windows. On Windows, use the Web Editor via Chrome/Edge Web Bluetooth (https://tomladder.github.io/thermoprint/) or use python scripts for template generation.`,
+    );
+  }
   if (!_bt) _bt = createBluetooth();
   return _bt;
 }

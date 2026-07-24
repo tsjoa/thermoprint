@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-from bluepy.btle import Peripheral, BTLEDisconnectError
+try:
+    from bluepy.btle import Peripheral, BTLEDisconnectError
+except ImportError:
+    Peripheral = None
+    BTLEDisconnectError = Exception
 from PIL import Image, ImageDraw, ImageFont
 from matplotlib import font_manager
 import argparse
@@ -9,8 +13,39 @@ import sys
 SERVICE_UUID = "0000ff00-0000-1000-8000-00805f9b34fb"
 CHAR_UUID = "0000ff02-0000-1000-8000-00805f9b34fb"
 
-def construct_bitmap(text, font_size, font_family="Arial", bold=False, italic=False, underline=False, canvas_height=96):
-    """Creates a monochrome bitmap from text."""
+import qrcode
+
+def construct_bitmap(
+    text,
+    font_size=None,
+    font_family="Arial",
+    bold=False,
+    italic=False,
+    underline=False,
+    canvas_height=96,
+    width_mm=40.0,
+    height_mm=12.0,
+    show_qr=True,
+    qr_content=None,
+    border=False,
+):
+    """Creates a monochrome bitmap label from text and optional QR code."""
+    width_px = int(width_mm * 8)    # 320 px for 40mm
+    height_px = int(canvas_height)  # 96 px for 12mm
+
+    formatted_text = text.replace('\\n', '\n')
+    lines = [line.strip() for line in formatted_text.split('\n') if line.strip()] or [text]
+    line_count = len(lines)
+
+    # Calculate proportional font size if not specified
+    if font_size is None or font_size <= 0 or font_size > 40:
+        if line_count == 1:
+            font_size = 24
+        elif line_count == 2:
+            font_size = 20
+        else:
+            font_size = 16
+
     try:
         font_path = font_manager.findfont(font_manager.FontProperties(
             family=font_family,
@@ -27,19 +62,41 @@ def construct_bitmap(text, font_size, font_family="Arial", bold=False, italic=Fa
             except IOError:
                 font = ImageFont.load_default()
 
-    dummy_img = Image.new('1', (1, 1))
-    draw = ImageDraw.Draw(dummy_img)
-    text_width = draw.textlength(text, font=font)
-    canvas_width = int(text_width) + 4
-
-    img = Image.new('1', (canvas_width, canvas_height), color=1)
+    img = Image.new('1', (width_px, height_px), color=1)
     draw = ImageDraw.Draw(img)
-    draw.text((2, canvas_height / 2), text, font=font, fill=0, anchor="lm")
 
-    if underline:
-        text_height = font.getbbox(text)[3]
-        underline_y = (canvas_height / 2) + (text_height / 2)
-        draw.line([(2, underline_y), (text_width + 2, underline_y)], fill=0, width=1)
+    if show_qr:
+        qr_size = int(height_px * 0.875) # 84px for 96px canvas
+        qr_x = width_px - qr_size - 16   # 220px for 320px width
+        qr_y = (height_px - qr_size) // 2
+
+        qr_text = qr_content if qr_content else formatted_text.replace('\n', ' ')
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_M,
+            box_size=2,
+            border=1,
+        )
+        qr.add_data(qr_text)
+        qr.make(fit=True)
+        qr_img = qr.make_image(fill_color="black", back_color="white").convert('1')
+        qr_img = qr_img.resize((qr_size, qr_size), Image.Resampling.NEAREST)
+        img.paste(qr_img, (qr_x, qr_y))
+
+        text_x = 12
+    else:
+        text_x = 12
+
+    line_height = int(font_size * 1.15)
+    total_text_height = line_count * line_height
+    start_y = max(2, (height_px - total_text_height) // 2)
+
+    for i, line in enumerate(lines):
+        y_pos = start_y + (i * line_height)
+        draw.text((text_x, y_pos), line, font=font, fill=0)
+
+    if border:
+        draw.rectangle([(2, 2), (width_px - 3, height_px - 3)], outline=0, width=1)
 
     return img
 
@@ -59,6 +116,9 @@ def bitmap_to_packet(bitmap):
 
 def connect_to_printer(device_address, retries=5, delay=2):
     """Connects to the printer via BLE (bluepy)."""
+    if Peripheral is None:
+        print("bluepy is not installed or not supported on this platform (Linux only).")
+        return None
     for i in range(retries):
         try:
             print(f"Connecting to {device_address} (attempt {i+1}/{retries})...")
