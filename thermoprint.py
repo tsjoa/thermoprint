@@ -64,9 +64,9 @@ def print_label(
     height_mm: float = 12,
     density: int = 3,
     paper_type: str = "gap",
-    dry_run: bool = False,
     interactive: bool = False,
     yes: bool = True,
+    copies: int = 1,
 ) -> Dict[str, Any]:
     """
     Print a text + QR code thermal label directly to a Marklife P15 BLE printer.
@@ -88,6 +88,7 @@ def print_label(
         dry_run (bool): Render only, do not send to printer (default: False).
         interactive (bool): Pause and prompt to review/edit text before printing.
         yes (bool): Skip confirmation prompt when called programmatically (default: True).
+        copies (int): Number of label copies to print (default: 1).
 
     Returns:
         dict: Result status or JSON metadata.
@@ -99,6 +100,8 @@ def print_label(
         cmd.append("-y")
     if interactive:
         cmd.append("-i")
+    if copies > 1:
+        cmd.extend(["-c", str(copies)])
     if address and not dry_run:
         cmd.extend(["-a", address])
     if qr:

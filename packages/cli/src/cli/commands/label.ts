@@ -34,6 +34,7 @@ export function registerLabelCommands(program: Command): void {
     .option("-a, --address <mac>", "target printer BLE MAC address")
     .option("-p, --printer <name>", "target printer name")
     .option("-o, --out <path>", "save generated JSON template to file")
+    .option("-c, --copies <number>", "number of label copies to print", "1")
     .option("--font-size <px>", "font size in px", "22")
     .option("--width-mm <mm>", "label width in mm", "40")
     .option("--height-mm <mm>", "label height in mm", "12")
@@ -57,6 +58,7 @@ export function registerLabelCommands(program: Command): void {
       const widthMm = parseFloat(opts.widthMm) || 40;
       const heightMm = parseFloat(opts.heightMm) || 12;
       const fontSize = parseInt(opts.fontSize) || 22;
+      const copies = Math.max(1, parseInt(opts.copies) || 1);
 
       let currentText = textArg;
 
@@ -207,20 +209,29 @@ export function registerLabelCommands(program: Command): void {
           off += cmd.data.length;
         }
 
-        if (spinner) spinner.text = "Printing...";
         const CHUNK = 96;
-        for (let i = 0; i < allBytes.length; i += CHUNK) {
-          const chunk = allBytes.subarray(i, Math.min(i + CHUNK, allBytes.length));
-          await tx.write(chunk, true);
-          await new Promise((r) => setTimeout(r, 30));
+        for (let c = 0; c < copies; c++) {
+          if (spinner) {
+            spinner.text = copies > 1 ? `Printing copy ${c + 1} of ${copies}...` : "Printing...";
+          }
+          for (let i = 0; i < allBytes.length; i += CHUNK) {
+            const chunk = allBytes.subarray(i, Math.min(i + CHUNK, allBytes.length));
+            await tx.write(chunk, true);
+            await new Promise((r) => setTimeout(r, 30));
+          }
+          if (c < copies - 1) {
+            await new Promise((r) => setTimeout(r, 300));
+          }
         }
 
         await conn.disconnect();
 
         if (opts.json) {
-          console.log(JSON.stringify({ status: "success" }));
+          console.log(JSON.stringify({ status: "success", copies }));
         } else {
-          spinner?.succeed(chalk.green("Print complete!"));
+          spinner?.succeed(
+            chalk.green(copies > 1 ? `Printed ${copies} copies!` : "Print complete!"),
+          );
         }
         process.exit(0);
       } catch (err: any) {
