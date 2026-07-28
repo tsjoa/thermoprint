@@ -64,6 +64,7 @@ def print_label(
     height_mm: float = 12,
     density: int = 3,
     paper_type: str = "gap",
+    dry_run: bool = False,
     interactive: bool = False,
     yes: bool = True,
     copies: int = 1,
