@@ -57,16 +57,16 @@ describe("L11 commands", () => {
       bytesPerRow: 48,
     };
     const { data } = cmd.printBitmap(image);
-    // Header: 1D 76 30 00 <wl> <wh> <hl> <hh>
+    // Header: 1D 76 30 00 <bytesPerCol_L> <bytesPerCol_H> <width_L> <width_H>
     expect(data[0]).toBe(0x1d);
     expect(data[1]).toBe(0x76);
     expect(data[2]).toBe(0x30);
     expect(data[3]).toBe(0x00); // quality
-    expect(data[4]).toBe(48); // bytesPerRow low
-    expect(data[5]).toBe(0);  // bytesPerRow high
-    expect(data[6]).toBe(1);  // height low
-    expect(data[7]).toBe(0);  // height high
-    expect(data.length).toBe(8 + 48); // header + pixel data
+    expect(data[4]).toBe(1);   // bytesPerCol low (Math.ceil(1/8) = 1)
+    expect(data[5]).toBe(0);   // bytesPerCol high
+    expect(data[6]).toBe(128); // width low (384 & 0xff = 128)
+    expect(data[7]).toBe(1);   // width high (384 >> 8 = 1)
+    expect(data.length).toBe(8 + 384); // header + col-major bitmap data
   });
 
   test("printBitmap is marked as bulk", () => {
@@ -98,14 +98,15 @@ describe("L11Protocol", () => {
     const image = { data: new Uint8Array(1), width: 8, height: 1, bytesPerRow: 1 };
     const commands = proto.buildPrintSequence(image, { paperType: "continuous" });
     const labels = commands.map((c) => c.label);
-    expect(labels).toContain("feed-dots");
+    expect(labels).toContain("feed-lf");
     expect(labels).not.toContain("position-to-gap");
   });
 
   test("buildPrintSequence includes density when provided", () => {
     const image = { data: new Uint8Array(1), width: 8, height: 1, bytesPerRow: 1 };
     const commands = proto.buildPrintSequence(image, { density: 3 });
-    expect(commands[0].label).toBe("set-density");
+    const labels = commands.map((c) => c.label);
+    expect(labels).toContain("set-density");
   });
 
   test("parseResponse identifies credit grant", () => {

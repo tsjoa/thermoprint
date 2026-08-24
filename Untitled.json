@@ -1,0 +1,45 @@
+{
+  "name": "Untitled",
+  "label": {
+    "widthMm": 40,
+    "heightMm": 12,
+    "widthPx": 320,
+    "heightPx": 96
+  },
+  "elements": [
+    {
+      "id": "ce3374dc-f5bd-4e21-bdb5-3c4ac327409a",
+      "type": "text",
+      "x": -7.733326877249841,
+      "y": 16.26666797015806,
+      "width": 231.662766385023,
+      "height": 60,
+      "rotation": 0,
+      "props": {
+        "text": "RELAY-\n16CH-12V",
+        "fontSize": 30,
+        "fontFamily": "Inter",
+        "fontWeight": 600,
+        "letterSpacing": 0,
+        "fill": "#000000",
+        "align": "center",
+        "italic": false
+      }
+    },
+    {
+      "id": "6b124c12-5ba4-41a4-bb43-7ec4fb555c4d",
+      "type": "qrcode",
+      "x": 230.84623295455924,
+      "y": 11.878000504551053,
+      "width": 67.55375755308103,
+      "height": 67.85533680971821,
+      "rotation": 0,
+      "props": {
+        "content": "RELAY- 16CH-12V",
+        "errorCorrectionLevel": "M"
+      }
+    }
+  ],
+  "createdAt": 1784811640894,
+  "updatedAt": 1784811640894
+}
