@@ -18,6 +18,7 @@
 
 <p align="center">
   <a href="https://tomladder.github.io/thermoprint/">🌐 Web Editor</a> •
+  <a href="#-windows-python-cli">Windows</a> •
   <a href="#features">Features</a> •
   <a href="#packages">Packages</a> •
   <a href="#quick-start">Quick Start</a> •
@@ -59,6 +60,46 @@ cd packages/web && bun run dev
 Open the web UI and select **Local** in the printer panel.
 
 *(See [P15-PRINTING.md](P15-PRINTING.md) for full context).*
+
+---
+
+## 🪟 Windows (Python CLI)
+
+BlueZ/Noble-based BLE (used by the Bun CLI) isn't available on Windows, so this repo also ships a pure-Python CLI (`cli.py` / `thermoprint.py`) built on [Bleak](https://github.com/hbldh/bleak), which works natively on Windows, macOS, and Linux. It's installed as the `thermoprint` console script and is the recommended way to print from Windows.
+
+**Requirements:** [uv](https://docs.astral.sh/uv/) and Bluetooth LE support on your machine.
+
+**Run from Git Bash** (or PowerShell — the commands are identical):
+
+```bash
+# From the repo root
+uv run thermoprint discover
+
+# Print a text + QR code label — auto-discovers and connects to the
+# first compatible printer found (P12/P15/P7/Marklife/Phomemo) if
+# -a/--address is omitted
+uv run thermoprint label "hello"
+
+# Target a specific printer by BLE MAC address instead of auto-discovering
+uv run thermoprint label "RELAY-16CH\n12V MODULE\nREV 2.0" -a 5E:55:09:26:72:D3
+
+# Render only, without sending to a printer (also saves a PNG preview)
+uv run thermoprint label "hello" --dry-run --save-image preview.png
+
+# Print an existing image file
+uv run thermoprint print label.png
+
+# Configure the printer's auto-power-off timer
+uv run thermoprint power-off --never
+```
+
+`uv run` automatically creates/updates the project's virtual environment from [pyproject.toml](pyproject.toml) on first use, so no separate install step is required.
+
+**Auto-discovery:** when `-a/--address` is omitted, the CLI scans for 5 seconds and uses the first BLE device whose name starts with `P12_`, `P15_`, `P7_`, `Marklife`, or `Phomemo` (or that advertises the printer's service UUID). If no compatible printer is found in range, the command exits with an error asking you to pass `-a` explicitly.
+
+**Troubleshooting:**
+- If `discover`/`label` find nothing, make sure the printer is powered on, in range, and that Windows Bluetooth is turned on.
+- If Windows prompts to "pair" the printer, you can dismiss it — Bleak talks to the printer directly over BLE GATT and does not require OS-level pairing.
 
 ---
 

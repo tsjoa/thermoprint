@@ -56,7 +56,7 @@ def format_label_preview(text: str, show_qr: bool = True) -> str:
 
 def print_label(
     text: str,
-    address: str = "03:0D:7A:D6:5E:B1",
+    address: Optional[str] = None,
     qr: Optional[str] = None,
     border: bool = False,
     font_size: int = 22,

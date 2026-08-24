@@ -35,10 +35,21 @@ DEFAULT_PRINTER_ADDRESS = "5E:55:09:26:72:D3"
 
 
 async def resolve_address(address_arg: str = None) -> str:
-    """Returns explicit address if provided, otherwise default or auto-discover."""
+    """Returns explicit address if provided, otherwise scans and returns the first compatible printer found."""
     if address_arg:
         return address_arg
-    return DEFAULT_PRINTER_ADDRESS
+
+    print("No address specified, scanning for a compatible printer...")
+    printers = await scan_printers(timeout=5.0)
+    if not printers:
+        raise RuntimeError(
+            "No compatible BLE printer found. Make sure it's powered on and in range, "
+            "or pass -a/--address explicitly."
+        )
+
+    printer = printers[0]
+    print(f"Found {printer['name']} ({printer['address']}).")
+    return printer["address"]
 
 
 from thermoprint import format_label_preview
@@ -188,7 +199,7 @@ def main():
 
     # Power-off subcommand
     p_power = subparsers.add_parser("power-off", help="Configure printer auto-power off timeout")
-    p_power.add_argument("-a", "--address", default=DEFAULT_PRINTER_ADDRESS, help="Printer BLE MAC address")
+    p_power.add_argument("-a", "--address", default=None, help="Printer BLE MAC address (auto-discovers if omitted)")
     p_power.add_argument("-n", "--never", action="store_true", default=True, help="Keep printer powered on until battery is empty (default)")
     p_power.add_argument("-s", "--seconds", type=int, default=0, help="Auto-shutdown timeout in seconds (0 = never)")
     p_power.set_defaults(func=cmd_power_off)
@@ -197,7 +208,7 @@ def main():
     p_label = subparsers.add_parser("label", help="Print a text label")
     p_label.add_argument("text", nargs="?", default="", help="Label text (use \\n for newlines)")
     p_label.add_argument("-i", "--interactive", action="store_true", help="Interactive prompt menu")
-    p_label.add_argument("-a", "--address", default=DEFAULT_PRINTER_ADDRESS, help="Printer BLE MAC address")
+    p_label.add_argument("-a", "--address", default=None, help="Printer BLE MAC address (auto-discovers if omitted)")
     p_label.add_argument("-q", "--qr", help="Custom QR code text (defaults to label text)")
     p_label.add_argument("--no-qr", action="store_true", help="Disable QR code generation")
     p_label.add_argument("--font-size", type=int, default=None, help="Font size in px (auto-scaled if omitted)")
@@ -222,7 +233,11 @@ def main():
     p_print.set_defaults(func=cmd_print_image)
 
     args = parser.parse_args()
-    args.func(args)
+    try:
+        args.func(args)
+    except RuntimeError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
