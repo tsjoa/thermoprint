@@ -8,6 +8,8 @@ import { spawn } from "child_process";
 import * as readline from "readline";
 import * as child_process from "child_process";
 import * as fs from "fs";
+import * as path from "path";
+import { fileURLToPath } from "url";
 import type {
   BleTransport,
   BleConnection,
@@ -22,23 +24,60 @@ import type {
 // Find bluepy-helper binary
 // ---------------------------------------------------------------------------
 
+function findInVenv(startDir: string): string | null {
+  let curr = startDir;
+  while (curr && curr !== "/" && curr !== ".") {
+    const venv = path.join(curr, ".venv");
+    if (fs.existsSync(venv)) {
+      try {
+        const matches = child_process
+          .execSync(`find "${venv}" -name "bluepy-helper" 2>/dev/null`, {
+            encoding: "utf-8",
+          })
+          .trim()
+          .split("\n");
+        for (const m of matches) {
+          if (m && fs.existsSync(m)) return m;
+        }
+      } catch {}
+    }
+    const parent = path.dirname(curr);
+    if (parent === curr) break;
+    curr = parent;
+  }
+  return null;
+}
+
 function findBluepyHelper(): string {
   // Check environment override first
   if (process.env.BLUEPY_HELPER) return process.env.BLUEPY_HELPER;
 
-  // Try to find via uv/python
+  // Try to find via uv/python in CWD
   try {
-    const out = child_process.execSync(
-      "uv run python3 -c \"import bluepy, os; print(os.path.join(os.path.dirname(bluepy.__file__), 'bluepy-helper'))\"",
-      { encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] },
-    ).trim();
+    const out = child_process
+      .execSync(
+        "uv run python3 -c \"import bluepy, os; print(os.path.join(os.path.dirname(bluepy.__file__), 'bluepy-helper'))\"",
+        { encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] },
+      )
+      .trim();
     if (out && fs.existsSync(out)) return out;
   } catch {}
 
-  // Fallback: common locations
+  // Search parent directories from source file location and CWD for .venv
+  try {
+    const srcDir = path.dirname(fileURLToPath(import.meta.url));
+    const foundFromSrc = findInVenv(srcDir);
+    if (foundFromSrc) return foundFromSrc;
+
+    const foundFromCwd = findInVenv(process.cwd());
+    if (foundFromCwd) return foundFromCwd;
+  } catch {}
+
+  // Fallback: common system locations
   const candidates = [
     "/usr/lib/python3/dist-packages/bluepy/bluepy-helper",
     "/usr/local/lib/python3.12/dist-packages/bluepy/bluepy-helper",
+    "/usr/local/lib/python3.13/dist-packages/bluepy/bluepy-helper",
   ];
   for (const c of candidates) {
     if (fs.existsSync(c)) return c;
