@@ -116,6 +116,9 @@ def cmd_label(args):
         show_qr=not args.no_qr,
         qr_content=args.qr,
         border=args.border,
+        font_scale=args.font_scale,
+        min_font_size=args.min_font_size,
+        max_font_size=args.max_font_size,
     )
 
     payload = bitmap_to_packet(bitmap)
@@ -136,6 +139,7 @@ def cmd_label(args):
             bitmap_payload=payload,
             canvas_width=bitmap.width,
             segmented_paper=args.segmented_paper,
+            feed_mm=args.feed_mm,
             progress_callback=print,
         )
     )
@@ -168,6 +172,7 @@ def cmd_print_image(args):
             bitmap_payload=payload,
             canvas_width=img.width,
             segmented_paper=args.segmented_paper,
+            feed_mm=args.feed_mm,
             progress_callback=print,
         )
     )
@@ -211,7 +216,10 @@ def main():
     p_label.add_argument("-a", "--address", default=None, help="Printer BLE MAC address (auto-discovers if omitted)")
     p_label.add_argument("-q", "--qr", help="Custom QR code text (defaults to label text)")
     p_label.add_argument("--no-qr", action="store_true", help="Disable QR code generation")
-    p_label.add_argument("--font-size", type=int, default=None, help="Font size in px (auto-scaled if omitted)")
+    p_label.add_argument("--font-size", type=int, default=None, help="Font size in px (auto-fit to the label if omitted)")
+    p_label.add_argument("--font-scale", type=float, default=1.0, help="Multiplier applied to the auto-fit (or explicit) font size, e.g. 2.0 to double it (default: 1.0)")
+    p_label.add_argument("--min-font-size", type=int, default=8, help="Smallest font size the auto-fit may choose (default: 8)")
+    p_label.add_argument("--max-font-size", type=int, default=64, help="Largest font size the auto-fit may choose (default: 64)")
     p_label.add_argument("--font-family", type=str, default="Arial")
     p_label.add_argument("--bold", action="store_true")
     p_label.add_argument("--italic", action="store_true")
@@ -220,6 +228,7 @@ def main():
     p_label.add_argument("--height-mm", type=float, default=12.0, help="Height in mm (default: 12)")
     p_label.add_argument("-b", "--border", action="store_true", help="Draw border around label")
     p_label.add_argument("--segmented-paper", action="store_true")
+    p_label.add_argument("--feed-mm", type=float, default=5.0, help="Blank paper fed out after the label, in mm (default: 5.0)")
     p_label.add_argument("--dry-run", action="store_true", help="Render only, do not send to printer")
     p_label.add_argument("--save-image", help="Save rendered label as image file")
     p_label.set_defaults(func=cmd_label)
@@ -229,6 +238,7 @@ def main():
     p_print.add_argument("file", help="Path to image file")
     p_print.add_argument("-a", "--address", help="Printer BLE MAC address (auto-discovers if omitted)")
     p_print.add_argument("--segmented-paper", action="store_true")
+    p_print.add_argument("--feed-mm", type=float, default=5.0, help="Blank paper fed out after the image, in mm (default: 5.0)")
     p_print.add_argument("--dry-run", action="store_true", help="Render only, do not send to printer")
     p_print.set_defaults(func=cmd_print_image)
 

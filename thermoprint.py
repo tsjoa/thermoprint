@@ -59,7 +59,9 @@ def print_label(
     address: Optional[str] = None,
     qr: Optional[str] = None,
     border: bool = False,
-    font_size: int = 22,
+    font_size: Optional[int] = None,
+    font_scale: float = 1.0,
+    feed_mm: float = 5.0,
     width_mm: float = 40,
     height_mm: float = 12,
     density: int = 3,
@@ -81,7 +83,10 @@ def print_label(
         address (str): Target BLE MAC address (default: "03:0D:7A:D6:5E:B1").
         qr (str, optional): Custom QR code content (defaults to label text).
         border (bool): Print fine 1px outline box around text box (default: False).
-        font_size (int): Font size in px (default: 22).
+        font_size (int, optional): Font size in px (auto-fit to the label if omitted).
+        font_scale (float): Multiplier applied to the auto-fit (or explicit) font size,
+            e.g. 2.0 to double it (default: 1.0).
+        feed_mm (float): Blank paper fed out after the label, in mm (default: 5.0).
         width_mm (float): Label width in mm (default: 40).
         height_mm (float): Label height in mm (default: 12).
         density (int): Print density 1-3 (default: 3).
@@ -111,6 +116,10 @@ def print_label(
         cmd.append("-b")
     if font_size:
         cmd.extend(["--font-size", str(font_size)])
+    if font_scale and font_scale != 1.0:
+        cmd.extend(["--font-scale", str(font_scale)])
+    if feed_mm and feed_mm != 5.0:
+        cmd.extend(["--feed-mm", str(feed_mm)])
     if width_mm:
         cmd.extend(["--width-mm", str(width_mm)])
     if height_mm:

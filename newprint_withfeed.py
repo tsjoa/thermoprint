@@ -15,6 +15,43 @@ CHAR_UUID = "0000ff02-0000-1000-8000-00805f9b34fb"
 
 import qrcode
 
+
+def _load_font(font_family, bold, italic, font_size):
+    """Loads a TrueType font, falling back to Arial or PIL's built-in default."""
+    try:
+        font_path = font_manager.findfont(font_manager.FontProperties(
+            family=font_family,
+            weight="bold" if bold else "normal",
+            style="italic" if italic else "normal"
+        ))
+        return ImageFont.truetype(font_path, font_size)
+    except Exception:
+        try:
+            return ImageFont.truetype(f"{font_family}.ttf", font_size)
+        except IOError:
+            try:
+                return ImageFont.truetype("arial.ttf", font_size)
+            except IOError:
+                return ImageFont.load_default()
+
+
+def _fit_font_size(lines, font_family, bold, italic, avail_width, avail_height, min_size=8, max_size=64):
+    """Finds the largest font size whose rendered text fits within avail_width/avail_height."""
+    best = min_size
+    for size in range(max_size, min_size - 1, -1):
+        font = _load_font(font_family, bold, italic, size)
+        line_height = int(size * 1.15)
+        if line_height * len(lines) > avail_height:
+            continue
+        max_line_width = max(
+            (font.getbbox(line)[2] - font.getbbox(line)[0]) for line in lines
+        )
+        if max_line_width <= avail_width:
+            best = size
+            break
+    return best
+
+
 def construct_bitmap(
     text,
     font_size=None,
@@ -28,46 +65,49 @@ def construct_bitmap(
     show_qr=True,
     qr_content=None,
     border=False,
+    font_scale=1.0,
+    min_font_size=8,
+    max_font_size=64,
 ):
-    """Creates a monochrome bitmap label from text and optional QR code."""
+    """Creates a monochrome bitmap label from text and optional QR code.
+
+    If font_size is omitted, the largest font that fits the available text
+    area is chosen automatically (so short text, e.g. <=10 chars, prints much
+    larger than a long multi-line label would). font_scale then multiplies
+    that chosen (or explicit) size, letting callers bump everything up or
+    down without fighting the auto-fit logic.
+    """
     width_px = int(width_mm * 8)    # 320 px for 40mm
     height_px = int(canvas_height)  # 96 px for 12mm
 
     formatted_text = text.replace('\\n', '\n')
     lines = [line.strip() for line in formatted_text.split('\n') if line.strip()] or [text]
-    line_count = len(lines)
 
-    # Calculate proportional font size if not specified
-    if font_size is None or font_size <= 0 or font_size > 40:
-        if line_count == 1:
-            font_size = 24
-        elif line_count == 2:
-            font_size = 20
-        else:
-            font_size = 16
+    text_x = 12
+    if show_qr:
+        qr_size = int(height_px * 0.875)  # 84px for 96px canvas
+        qr_x = width_px - qr_size - 16    # 220px for 320px width
+        avail_width = qr_x - text_x - 6
+    else:
+        avail_width = width_px - text_x - 12
+    avail_height = height_px - 4
 
-    try:
-        font_path = font_manager.findfont(font_manager.FontProperties(
-            family=font_family,
-            weight="bold" if bold else "normal",
-            style="italic" if italic else "normal"
-        ))
-        font = ImageFont.truetype(font_path, font_size)
-    except Exception:
-        try:
-            font = ImageFont.truetype(f"{font_family}.ttf", font_size)
-        except IOError:
-            try:
-                font = ImageFont.truetype("arial.ttf", font_size)
-            except IOError:
-                font = ImageFont.load_default()
+    if font_size is None or font_size <= 0:
+        font_size = _fit_font_size(
+            lines, font_family, bold, italic,
+            avail_width=avail_width, avail_height=avail_height,
+            min_size=min_font_size, max_size=max_font_size,
+        )
+
+    if font_scale and font_scale != 1.0:
+        font_size = max(min_font_size, min(max_font_size, round(font_size * font_scale)))
+
+    font = _load_font(font_family, bold, italic, font_size)
 
     img = Image.new('1', (width_px, height_px), color=1)
     draw = ImageDraw.Draw(img)
 
     if show_qr:
-        qr_size = int(height_px * 0.875) # 84px for 96px canvas
-        qr_x = width_px - qr_size - 16   # 220px for 320px width
         qr_y = (height_px - qr_size) // 2
 
         qr_text = qr_content if qr_content else formatted_text.replace('\n', ' ')
@@ -83,12 +123,8 @@ def construct_bitmap(
         qr_img = qr_img.resize((qr_size, qr_size), Image.Resampling.NEAREST)
         img.paste(qr_img, (qr_x, qr_y))
 
-        text_x = 12
-    else:
-        text_x = 12
-
     line_height = int(font_size * 1.15)
-    total_text_height = line_count * line_height
+    total_text_height = len(lines) * line_height
     start_y = max(2, (height_px - total_text_height) // 2)
 
     for i, line in enumerate(lines):
@@ -139,10 +175,15 @@ def connect_to_printer(device_address, retries=5, delay=2):
     return None
 
 
-def send_print_job(peripheral, bitmap, segmented_paper=False):
-    """Sends the print job to a connected printer with proper paper advance."""
+def send_print_job(peripheral, bitmap, segmented_paper=False, feed_mm=5.0):
+    """Sends the print job to a connected printer with proper paper advance.
+
+    feed_mm controls the blank paper fed out after the label, using the
+    L11 protocol's dot-precise "ESC J" feed command (`1B 4A NN`).
+    """
     payload = bitmap_to_packet(bitmap)
     canvas_width = bitmap.width
+    feed_dots = max(0, min(255, round(feed_mm * 8)))  # 8 dots/mm (203 dpi print head)
 
     try:
         char = peripheral.getCharacteristics(uuid=CHAR_UUID)[0]
@@ -161,8 +202,8 @@ def send_print_job(peripheral, bitmap, segmented_paper=False):
             payload,
         ]
 
-        # Add line feeds to advance paper
-        packets.append(bytes([0x0a] * 5))  # feed 5 lines
+        # Feed feed_dots dots to advance paper (ESC J)
+        packets.append(bytes([0x1b, 0x4a, feed_dots]))
 
         if segmented_paper:
             packets.extend([

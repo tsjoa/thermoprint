@@ -45,16 +45,27 @@ async def scan_printers(timeout: float = 5.0, show_all: bool = False) -> List[Di
     return results
 
 
+DOTS_PER_MM = 8  # matches the 8 px/mm bitmap scale used elsewhere (203 dpi print head)
+
+
 async def print_bitmap_bleak(
     address: str,
     bitmap_payload: bytes,
     canvas_width: int,
     segmented_paper: bool = False,
+    feed_mm: float = 5.0,
     progress_callback: Optional[callable] = None,
 ) -> bool:
     """
     Connects to the printer via Bleak and streams print packets.
+
+    feed_mm controls the blank paper fed out after the label before the
+    stop command, using the L11 protocol's dot-precise "ESC J" feed
+    command (`1B 4A NN`, NN = dot count) instead of a fixed number of
+    raw line-feed bytes.
     """
+    feed_dots = max(0, min(255, round(feed_mm * DOTS_PER_MM)))
+
     packets = [
         bytes([0x10, 0xff, 0x40]),  # init command
         bytes([
@@ -66,7 +77,7 @@ async def print_bitmap_bleak(
             canvas_width & 0xff, (canvas_width >> 8) & 0xff
         ]),
         bitmap_payload,
-        bytes([0x0a] * 5),  # feed 5 lines
+        bytes([0x1b, 0x4a, feed_dots]),  # ESC J: feed feed_dots dots
     ]
 
     if segmented_paper:
