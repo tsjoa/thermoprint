@@ -11,7 +11,7 @@ import json
 import os
 import sys
 from pathlib import Path
-
+from aioesphomeapi import APIClient
 CONFIG_FILE = Path(__file__).parent / "calibration.json"
 DEFAULT_GATEWAY = "192.168.20.18"
 DEFAULT_PORT = 6053
@@ -52,9 +52,8 @@ def save_calibration(physical_mm: float):
     return data
 
 
-async def run_ruler_print(gateway_ip: str, max_mm: float = 100.0):
-    """Sends 10cm calibration ruler print job via ESPHome Native API."""
-    from aioesphomeapi import APIClient
+async def run_ruler_print(gateway_ip: str, max_mm: float = 50.0):
+    """Sends 5cm (50mm) calibration ruler print job within P15 buffer limits."""
 
     client = APIClient(
         address=gateway_ip,
@@ -72,9 +71,8 @@ async def run_ruler_print(gateway_ip: str, max_mm: float = 100.0):
 
     print(f"Printing 10cm ({max_mm}mm) Millimeter Calibration Ruler...")
     await client.execute_service(svc, {"max_mm": float(max_mm)})
-    await asyncio.sleep(4.0)
+    await asyncio.sleep(10.0)
     await client.disconnect()
-
 
 async def run_confirmation_print(gateway_ip: str, printable_mm: float, physical_mm: float):
     """Prints confirmation label using newly calibrated width."""
@@ -98,14 +96,13 @@ async def run_confirmation_print(gateway_ip: str, printable_mm: float, physical_
             "feed_mm": 5.0,
             "density": 3
         })
-    await asyncio.sleep(4.0)
+    await asyncio.sleep(10.0)
     await client.disconnect()
-
 
 def main():
     parser = argparse.ArgumentParser(description="Deterministic Roll Calibration for BLE Thermal Printers")
     parser.add_argument("--gateway", default=DEFAULT_GATEWAY, help="ESP32 Gateway IP address (default: 192.168.20.18)")
-    parser.add_argument("--span-mm", type=float, default=100.0, help="Ruler length in mm (default: 100mm / 10cm)")
+    parser.add_argument("--span-mm", type=float, default=50.0, help="Ruler length in mm (default: 50mm / 5cm)")
     parser.add_argument("--show", action="store_true", help="Show current saved calibration and exit")
     parser.add_argument("--set-mm", type=float, help="Manually set physical roll length in mm without printing ruler")
     args = parser.parse_args()
@@ -125,7 +122,7 @@ def main():
     print("==========================================================")
     print("      DETERMINISTIC BLE PRINTER ROLL CALIBRATION         ")
     print("==========================================================")
-    print("Step 1: Printing a 10cm (100mm) ruler across your label roll.")
+    print("Step 1: Printing a 50mm ruler across your label roll.")
     print("        The printer will automatically halt at the gap.\n")
 
     try:

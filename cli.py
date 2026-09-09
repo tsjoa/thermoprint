@@ -341,9 +341,9 @@ def main():
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # Calibrate subcommand
-    p_cal = subparsers.add_parser("calibrate", help="Interactively calibrate loaded roll dimensions using a 10cm ruler")
+    p_cal = subparsers.add_parser("calibrate", help="Interactively calibrate loaded roll dimensions using a 50mm ruler")
     p_cal.add_argument("-g", "--gateway", default="192.168.20.18", help="ESP32 Gateway IP address (default: 192.168.20.18)")
-    p_cal.add_argument("--span-mm", type=float, default=100.0, help="Ruler length in mm (default: 100mm / 10cm)")
+    p_cal.add_argument("--span-mm", type=float, default=50.0, help="Ruler length in mm (default: 50mm / 5cm)")
     p_cal.add_argument("--show", action="store_true", help="Show current saved calibration and exit")
     p_cal.add_argument("--set-mm", type=float, help="Manually set physical roll length in mm without printing ruler")
     p_cal.set_defaults(func=cmd_calibrate)
