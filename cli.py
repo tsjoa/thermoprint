@@ -13,6 +13,21 @@ from PIL import Image
 from generate_label import generate_label
 from newprint_withfeed import construct_bitmap, bitmap_to_packet
 from thermoprint_ble import scan_printers, print_bitmap_bleak
+from usb_print import find_usb_printer, send_usb_data, build_l11_payload
+import socket
+
+def send_tcp_data(host: str, port: int, data: bytes) -> bool:
+    """Sends raw L11 print stream to an ESP32-C3 network printer gateway."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(10.0)
+        s.connect((host, port))
+        s.sendall(data)
+        s.close()
+        return True
+    except Exception as e:
+        print(f"Network Gateway Error ({host}:{port}): {e}", file=sys.stderr)
+        return False
 
 
 def cmd_discover(args):
@@ -129,6 +144,38 @@ def cmd_label(args):
             bitmap.convert("RGB").save(args.save_image)
             print(f"[DRY-RUN] Saved preview to {args.save_image}")
         return
+    if getattr(args, "gateway", None):
+        host_port = args.gateway.split(":")
+        host = host_port[0]
+        port = int(host_port[1]) if len(host_port) > 1 else 9100
+        print(f"Sending print job to ESP32-C3 Gateway at {host}:{port}...")
+        net_data = build_l11_payload(bitmap, feed_mm=args.feed_mm)
+        success = send_tcp_data(host, port, net_data)
+        if success:
+            print("Done (sent to ESP32-C3 Gateway over Wi-Fi)!")
+        else:
+            sys.exit(1)
+        return
+
+    if getattr(args, "usb", False):
+        dev = find_usb_printer()
+        if dev is None:
+            print("Error: No USB printer (09c7:00d1) found. Check USB cable/connection.", file=sys.stderr)
+            sys.exit(1)
+        print(f"Connecting to USB printer: ID {dev.idVendor:04x}:{dev.idProduct:04x}...")
+        usb_data = build_l11_payload(bitmap, feed_mm=args.feed_mm)
+        success = send_usb_data(dev, usb_data)
+        try:
+            import usb.util
+            usb.util.dispose_resources(dev)
+        except Exception:
+            pass
+        if success:
+            print("Done (printed over USB)!")
+        else:
+            print("USB print failed.", file=sys.stderr)
+            sys.exit(1)
+        return
 
     address = asyncio.run(resolve_address(args.address))
     print(f"Connecting to printer at {address}...")
@@ -162,10 +209,41 @@ def cmd_print_image(args):
     if args.dry_run:
         print(f"[DRY-RUN] Image {args.file}: {img.size[0]}x{img.size[1]} px, {len(payload)} bytes payload.")
         return
+    if getattr(args, "gateway", None):
+        host_port = args.gateway.split(":")
+        host = host_port[0]
+        port = int(host_port[1]) if len(host_port) > 1 else 9100
+        print(f"Sending image to ESP32-C3 Gateway at {host}:{port}...")
+        net_data = build_l11_payload(img, feed_mm=args.feed_mm)
+        success = send_tcp_data(host, port, net_data)
+        if success:
+            print("Done (sent to ESP32-C3 Gateway over Wi-Fi)!")
+        else:
+            sys.exit(1)
+        return
+
+    if getattr(args, "usb", False):
+        dev = find_usb_printer()
+        if dev is None:
+            print("Error: No USB printer (09c7:00d1) found. Check USB cable/connection.", file=sys.stderr)
+            sys.exit(1)
+        print(f"Connecting to USB printer: ID {dev.idVendor:04x}:{dev.idProduct:04x}...")
+        usb_data = build_l11_payload(img, feed_mm=args.feed_mm)
+        success = send_usb_data(dev, usb_data)
+        try:
+            import usb.util
+            usb.util.dispose_resources(dev)
+        except Exception:
+            pass
+        if success:
+            print("Done (printed over USB)!")
+        else:
+            print("USB print failed.", file=sys.stderr)
+            sys.exit(1)
+        return
 
     address = asyncio.run(resolve_address(args.address))
     print(f"Connecting to printer at {address}...")
-
     asyncio.run(
         print_bitmap_bleak(
             address=address,
@@ -232,6 +310,8 @@ def main():
     p_label.add_argument("--dry-run", action="store_true", help="Render only, do not send to printer")
     p_label.add_argument("--save-image", help="Save rendered label as image file")
     p_label.set_defaults(func=cmd_label)
+    p_label.add_argument("-u", "--usb", action="store_true", help="Print directly via USB instead of Bluetooth")
+    p_label.add_argument("-g", "--gateway", metavar="IP[:PORT]", help="Send print job over Wi-Fi to ESP32-C3 BLE gateway (e.g. 192.168.20.18)")
 
     # Print subcommand
     p_print = subparsers.add_parser("print", help="Print an image file")
@@ -242,6 +322,8 @@ def main():
     p_print.add_argument("--dry-run", action="store_true", help="Render only, do not send to printer")
     p_print.set_defaults(func=cmd_print_image)
 
+    p_print.add_argument("-u", "--usb", action="store_true", help="Print directly via USB instead of Bluetooth")
+    p_print.add_argument("-g", "--gateway", metavar="IP[:PORT]", help="Send print job over Wi-Fi to ESP32-C3 BLE gateway (e.g. 192.168.20.18)")
     args = parser.parse_args()
     try:
         args.func(args)
