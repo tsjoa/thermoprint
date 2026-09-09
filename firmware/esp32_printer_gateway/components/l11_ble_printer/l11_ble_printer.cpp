@@ -325,53 +325,81 @@ float L11BlePrinter::get_progress() const {
 }
 
 bool L11BlePrinter::print_text(const std::string &text, float width_mm, float feed_mm, uint8_t density, bool border) {
-  // Split into lines
+  // 1. Split into lines and clamp to maximum 3 lines
   std::vector<std::string> lines;
   std::string cur_line = "";
   for (char c : text) {
     if (c == '\n') {
-      lines.push_back(cur_line);
-      cur_line = "";
+      if (!cur_line.empty() || !lines.empty()) {
+        lines.push_back(cur_line);
+        cur_line = "";
+      }
+      if (lines.size() >= 3) break;
     } else if (c != '\r') {
       cur_line += c;
     }
   }
-  lines.push_back(cur_line);
+  if (lines.size() < 3 && !cur_line.empty()) {
+    lines.push_back(cur_line);
+  }
+  if (lines.empty()) {
+    lines.push_back("");
+  }
+
+  // 2. Determine canvas width & printable bounds
+  uint16_t canvas_width = (uint16_t)std::max(120, (int)(width_mm * 8.0f));
+  int avail_w = canvas_width - 16;  // usable horizontal space inside borders
+  int avail_h = 86;                 // usable vertical height (96 dots - borders)
 
   size_t max_chars = 0;
   for (const auto &l : lines) {
     if (l.length() > max_chars) max_chars = l.length();
   }
-  uint16_t min_needed = (uint16_t)(max_chars * 16 + 20);
-  uint16_t canvas_width = (uint16_t)std::max((int)min_needed, (int)(width_mm * 8.0f));
-  if (canvas_width < 120) canvas_width = 120;
+  if (max_chars == 0) max_chars = 1;
+
+  // 3. Find optimal integer scale factor (S in 1..6) that fits both W and H
+  int num_lines = (int)lines.size();
+  int best_scale = 1;
+
+  for (int s = 6; s >= 1; s--) {
+    int glyph_w = 8 * s;
+    int glyph_h = 8 * s;
+    int line_gap = (num_lines > 1) ? std::max(2, s * 2) : 0;
+
+    int total_text_w = (int)max_chars * glyph_w;
+    int total_text_h = num_lines * glyph_h + (num_lines - 1) * line_gap;
+
+    if (total_text_w <= avail_w && total_text_h <= avail_h) {
+      best_scale = s;
+      break;
+    }
+  }
+
+  // 4. Calculate centered position for each line
+  int glyph_w = 8 * best_scale;
+  int glyph_h = 8 * best_scale;
+  int line_gap = (num_lines > 1) ? std::max(2, best_scale * 2) : 0;
+  int total_block_h = num_lines * glyph_h + (num_lines - 1) * line_gap;
+  int start_y_block = (96 - total_block_h) / 2;
 
   struct LinePos {
     std::string text;
     int start_x;
     int start_y;
+    int scale;
   };
   std::vector<LinePos> rendered_lines;
-  if (lines.size() == 1) {
-    int sx = std::max(10, (int)(canvas_width - lines[0].length() * 16) / 2);
-    rendered_lines.push_back({lines[0], sx, 40});
-  } else if (lines.size() == 2) {
-    int sx0 = std::max(10, (int)(canvas_width - lines[0].length() * 16) / 2);
-    int sx1 = std::max(10, (int)(canvas_width - lines[1].length() * 16) / 2);
-    rendered_lines.push_back({lines[0], sx0, 24});
-    rendered_lines.push_back({lines[1], sx1, 56});
-  } else {
-    for (size_t i = 0; i < std::min((size_t)3, lines.size()); i++) {
-      int sx = std::max(10, (int)(canvas_width - lines[i].length() * 16) / 2);
-      int sy = 12 + i * 28;
-      rendered_lines.push_back({lines[i], sx, sy});
-    }
+  for (int i = 0; i < num_lines; i++) {
+    int line_w = (int)lines[i].length() * glyph_w;
+    int sx = std::max(8, (int)(canvas_width - line_w) / 2);
+    int sy = start_y_block + i * (glyph_h + line_gap);
+    rendered_lines.push_back({lines[i], sx, sy, best_scale});
   }
 
   std::vector<uint8_t> payload;
   payload.reserve(canvas_width * 12);
 
-  // Render 8x8 font scaled 2x horizontally and vertically into column-major bytes
+  // 5. Render scaled font into column-major bytes
   for (uint16_t x = 0; x < canvas_width; x++) {
     for (int y_group = 88; y_group >= 0; y_group -= 8) {
       uint8_t col_byte = 0;
@@ -386,14 +414,16 @@ bool L11BlePrinter::print_text(const std::string &text, float width_mm, float fe
           }
         }
 
-        // Multiline text rendering
+        // Scaled text rendering
         for (const auto &lp : rendered_lines) {
-          if (py >= lp.start_y && py < lp.start_y + 16 && x >= lp.start_x) {
-            int char_idx = (x - lp.start_x) / 16;
-            int char_x = ((x - lp.start_x) % 16) / 2;
-            int char_y = (py - lp.start_y) / 2;
+          int line_h = 8 * lp.scale;
+          int line_w = (int)lp.text.length() * 8 * lp.scale;
+          if (py >= lp.start_y && py < lp.start_y + line_h && x >= lp.start_x && x < lp.start_x + line_w) {
+            int char_idx = (x - lp.start_x) / (8 * lp.scale);
+            int char_x = ((x - lp.start_x) % (8 * lp.scale)) / lp.scale;
+            int char_y = (py - lp.start_y) / lp.scale;
 
-            if (char_idx < (int)lp.text.length() && char_x < 8 && char_y < 8) {
+            if (char_idx < (int)lp.text.length() && char_x >= 0 && char_x < 8 && char_y >= 0 && char_y < 8) {
               char c = lp.text[char_idx];
               if (c >= 32 && c <= 126) {
                 uint8_t font_row = FONT8x8_BASIC[c - 32][char_y];
