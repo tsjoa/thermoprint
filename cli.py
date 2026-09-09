@@ -6,6 +6,7 @@ Command-line tool to discover and print labels on Marklife P12 / P15 / P7 printe
 
 import argparse
 import asyncio
+import json
 import os
 import sys
 from PIL import Image
@@ -270,9 +271,82 @@ def cmd_power_off(args):
     print("Auto-power off setting updated successfully!")
 
 
+def cmd_calibrate(args):
+    """Runs deterministic roll calibration with a 10cm ruler."""
+    import calibrate
+    if args.show:
+        cal = calibrate.load_calibration()
+        print("\nCurrent Saved Calibration:")
+        print(json.dumps(cal, indent=2))
+        return
+
+    if args.set_mm:
+        cal = calibrate.save_calibration(args.set_mm)
+        print(f"\nSaved calibration for {args.set_mm}mm roll:")
+        print(f"  -> Printable Width: {cal['printable_width_mm']} mm ({cal['printable_width_px']} px)")
+        return
+
+    print("==========================================================")
+    print("      DETERMINISTIC BLE PRINTER ROLL CALIBRATION         ")
+    print("==========================================================")
+    print(f"Step 1: Printing a 10cm ({args.span_mm}mm) ruler across your label roll.")
+    print("        The printer will automatically halt at the gap.\n")
+
+    try:
+        asyncio.run(calibrate.run_ruler_print(args.gateway, max_mm=args.span_mm))
+    except Exception as e:
+        print(f"Error printing calibration ruler: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    print("\n----------------------------------------------------------")
+    print("Step 2: Inspect the FIRST label that came out.")
+    print("        Find the millimeter number printed right before the")
+    print("        gap / cut edge of label #1.")
+    print("----------------------------------------------------------")
+
+    while True:
+        try:
+            val = input("\nEnter observed length in mm (e.g. 42, 30, 50): ").strip()
+            if not val:
+                continue
+            physical_mm = float(val)
+            if physical_mm <= 5 or physical_mm > 200:
+                print("Please enter a realistic label length between 10mm and 150mm.")
+                continue
+            break
+        except ValueError:
+            print("Invalid number. Please enter a numerical value (e.g. 42 or 42.5).")
+        except (KeyboardInterrupt, EOFError):
+            print("\nCalibration cancelled.")
+            sys.exit(0)
+
+    cal = calibrate.save_calibration(physical_mm)
+    print("\n==========================================================")
+    print("               CALIBRATION SUCCESSFUL                     ")
+    print("==========================================================")
+    print(f"  * Physical Roll Length:  {cal['physical_length_mm']} mm")
+    print(f"  * Margin Allowance:      {cal['margin_total_mm']} mm (1.65mm on each end)")
+    print(f"  * Calibrated Width:      {cal['printable_width_mm']} mm ({cal['printable_width_px']} px)")
+    print(f"  * Saved Configuration:   {calibrate.CONFIG_FILE}")
+    print("==========================================================\n")
+
+    confirm = input("Would you like to print a confirmation test label now? (y/n): ").strip().lower()
+    if confirm in ("y", "yes", ""):
+        asyncio.run(calibrate.run_confirmation_print(args.gateway, cal["printable_width_mm"], cal["physical_length_mm"]))
+        print("Confirmation test printed!")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Thermoprint CLI — Cross-platform Bluetooth thermal printer tool")
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    # Calibrate subcommand
+    p_cal = subparsers.add_parser("calibrate", help="Interactively calibrate loaded roll dimensions using a 10cm ruler")
+    p_cal.add_argument("-g", "--gateway", default="192.168.20.18", help="ESP32 Gateway IP address (default: 192.168.20.18)")
+    p_cal.add_argument("--span-mm", type=float, default=100.0, help="Ruler length in mm (default: 100mm / 10cm)")
+    p_cal.add_argument("--show", action="store_true", help="Show current saved calibration and exit")
+    p_cal.add_argument("--set-mm", type=float, help="Manually set physical roll length in mm without printing ruler")
+    p_cal.set_defaults(func=cmd_calibrate)
 
     # Discover subcommand
     p_disc = subparsers.add_parser("discover", help="Scan for nearby BLE thermal printers")

@@ -138,33 +138,29 @@ asyncio.run(batch())
 
 ---
 
-## 4. Calibrating a New Roll (Millimeter Calibration Ruler)
+## 4. Deterministic Roll Calibration (10cm Millimeter Ruler)
 
-Whenever you insert a new label roll (e.g. 30mm, 40mm, 50mm, or unknown size), print the millimeter ruler:
+Whenever you insert a new label roll (e.g. 30mm, 40mm, 50mm, or unknown size), run the interactive calibration tool:
 
 ```bash
-uv run --with aioesphomeapi python3 -c '
-import asyncio
-from aioesphomeapi import APIClient
+# Run interactive 10cm ruler calibration
+uv run thermoprint calibrate
 
-async def ruler():
-    client = APIClient(address="192.168.20.18", port=6053, password="", noise_psk="iY3Kssct4ASmO9MGWVY0L32HnwUXjO6ujW8ETa8vbc8=")
-    await client.connect(login=True)
-    _, services = await client.list_entities_services()
-    svc = next(s for s in services if s.name == "print_calibration_ruler")
-    await client.execute_service(svc, {"max_mm": 50.0})
-    await asyncio.sleep(2)
-    await client.disconnect()
+# Or check currently saved calibration
+uv run thermoprint calibrate --show
 
-asyncio.run(ruler())
-'
+# Or manually override roll length in mm
+uv run thermoprint calibrate --set-mm 42.0
 ```
 
-* **How to read the ruler**: Look at the number right at the trailing gap edge of the label.
-* **Formula**:
-  $$\text{Calibrated Width} = \text{Physical Number on Ruler} - 3.3\text{ mm (safe margins)}$$
-  *(For our 42mm roll: $42.0\text{ mm} - 3.3\text{ mm} = \mathbf{38.7\text{ mm}}$).*
-
+### Calibration Workflow:
+1. The gateway prints a continuous **10cm (100mm)** millimeter ruler and advances to the gap sensor stop.
+2. Inspect **Label #1** and note the millimeter number right at the trailing gap/cut line (e.g. `42`).
+3. Type `42` into the prompt.
+4. The tool automatically computes the exact printable width with safe 1.65mm border margins:
+   $$\text{Printable Width} = \text{Observed Length (42mm)} - 3.3\text{ mm} = \mathbf{38.7\text{ mm}}$$
+   and saves the configuration to `calibration.json`.
+5. Optionally prints a confirmation label to verify perfect edge-to-edge alignment.
 ---
 
 ## 5. Raw Network Printing (TCP Port 9100)
