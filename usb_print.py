@@ -67,7 +67,7 @@ def build_l11_payload(bitmap: Image.Image, feed_mm: float = 5.0, density: int = 
             canvas_width & 0xFF, (canvas_width >> 8) & 0xFF
         ]),
         payload,
-        bytes([0x1B, 0x4A, feed_dots]),       # ESC J feed
+        bytes([0x1D, 0x0C]),                  # Position to Gap (1D 0C)
         bytes([0x10, 0xFF, 0xF1, 0x45])       # Stop / flush
     ]
     return b"".join(packets)
