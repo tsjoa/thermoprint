@@ -14,10 +14,7 @@ import type { EditorElement } from "../../store/types.ts";
 import { LabelSizeSelector } from "../../label/label-size-selector.tsx";
 import { ThemeToggle } from "../../theme/theme-toggle.tsx";
 import { Tooltip } from "../../components/tooltip.tsx";
-
-function makeId(): string {
-  return crypto.randomUUID();
-}
+import { makeId } from "../../lib/id.ts";
 
 export function Toolbar() {
   const addElement = useEditorStore((s) => s.addElement);

@@ -1,6 +1,7 @@
 import { useCallback, useState, useEffect } from "react";
 import type { EditorElement, LabelConfig } from "../store/types.ts";
 import { useEditorStore } from "../store/editor-store.ts";
+import { makeId } from "../lib/id.ts";
 
 interface Template {
   id: string;
@@ -39,7 +40,7 @@ export function useTemplates() {
   const saveTemplate = useCallback((name: string) => {
     const state = useEditorStore.getState();
     const template: Template = {
-      id: crypto.randomUUID(),
+      id: makeId(),
       name,
       elements: structuredClone(state.elements),
       labelConfig: { ...state.labelConfig },
@@ -86,7 +87,7 @@ export function useTemplates() {
       reader.onload = () => {
         try {
           const template = JSON.parse(reader.result as string) as Template;
-          template.id = crypto.randomUUID();
+          template.id = makeId();
           const updated = [...loadTemplates(), template];
           saveTemplates(updated);
           setTemplates(updated);

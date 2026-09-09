@@ -3,7 +3,7 @@
  * instead of using Web Bluetooth directly.
  */
 
-const DEFAULT_URL = "http://localhost:7654";
+const DEFAULT_URL = "http://10.0.15.92:7654";
 
 export interface ProxyPrintOptions {
   density?: number;
