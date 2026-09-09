@@ -171,9 +171,25 @@ cd packages/web && bun run dev
 **Step 3**: Open the web UI (default http://localhost:5173). The printer panel should
 show "Local" mode selected and auto-connect to the print server. Design your label
 and click Print.
-
 The print server accepts print jobs on `POST http://localhost:7654/print` and handles
 trimming, dithering, column-major encoding, and BLE transmission.
+
+---
+
+### 3. Standalone ESP32-C3 Wi-Fi BLE Gateway (ESPHome)
+
+For a completely cloud-free, serverless setup that works across your local network without any Linux Bluetooth configuration:
+
+1. Flash the ESPHome firmware in `firmware/esp32_printer_gateway/`.
+2. The ESP32-C3 automatically connects to the P15 on demand when a print job arrives, prints with calibrated 38.7mm width and optical gap advance (`1D 0C`), and disconnects 2 seconds after finishing so phone apps can still connect.
+3. Send print jobs via:
+   - **Raw TCP port 9100** (`nc <gateway_ip> 9100 < print_stream.bin`)
+   - **ESPHome / Home Assistant API** (`print_text`, `print_test_label`, `feed_gap`)
+   - **Physical Button on GPIO9**
+
+*(See [firmware/esp32_printer_gateway/README.md](firmware/esp32_printer_gateway/README.md) for full details).*
+
+---
 
 ### CLI with template file
 
