@@ -72,7 +72,7 @@ async def run_ruler_print(gateway_ip: str, max_mm: float = 100.0):
 
     print(f"Printing 10cm ({max_mm}mm) Millimeter Calibration Ruler...")
     await client.execute_service(svc, {"max_mm": float(max_mm)})
-    await asyncio.sleep(2)
+    await asyncio.sleep(4.0)
     await client.disconnect()
 
 
@@ -98,7 +98,7 @@ async def run_confirmation_print(gateway_ip: str, printable_mm: float, physical_
             "feed_mm": 5.0,
             "density": 3
         })
-    await asyncio.sleep(2)
+    await asyncio.sleep(4.0)
     await client.disconnect()
 
 
