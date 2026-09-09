@@ -322,13 +322,48 @@ float L11BlePrinter::get_progress() const {
 }
 
 bool L11BlePrinter::print_text(const std::string &text, float width_mm, float feed_mm, uint8_t density, bool border) {
-  size_t chars_per_line = text.length();
-  uint16_t min_needed = (uint16_t)(chars_per_line * 16 + 20);
+  // Split into lines
+  std::vector<std::string> lines;
+  std::string cur_line = "";
+  for (char c : text) {
+    if (c == '\n') {
+      lines.push_back(cur_line);
+      cur_line = "";
+    } else if (c != '\r') {
+      cur_line += c;
+    }
+  }
+  lines.push_back(cur_line);
+
+  size_t max_chars = 0;
+  for (const auto &l : lines) {
+    if (l.length() > max_chars) max_chars = l.length();
+  }
+  uint16_t min_needed = (uint16_t)(max_chars * 16 + 20);
   uint16_t canvas_width = (uint16_t)std::max((int)min_needed, (int)(width_mm * 8.0f));
   if (canvas_width < 120) canvas_width = 120;
 
-  int text_pixel_width = (int)(chars_per_line * 16);
-  int start_x = std::max(10, (int)(canvas_width - text_pixel_width) / 2);
+  struct LinePos {
+    std::string text;
+    int start_x;
+    int start_y;
+  };
+  std::vector<LinePos> rendered_lines;
+  if (lines.size() == 1) {
+    int sx = std::max(10, (int)(canvas_width - lines[0].length() * 16) / 2);
+    rendered_lines.push_back({lines[0], sx, 40});
+  } else if (lines.size() == 2) {
+    int sx0 = std::max(10, (int)(canvas_width - lines[0].length() * 16) / 2);
+    int sx1 = std::max(10, (int)(canvas_width - lines[1].length() * 16) / 2);
+    rendered_lines.push_back({lines[0], sx0, 24});
+    rendered_lines.push_back({lines[1], sx1, 56});
+  } else {
+    for (size_t i = 0; i < std::min((size_t)3, lines.size()); i++) {
+      int sx = std::max(10, (int)(canvas_width - lines[i].length() * 16) / 2);
+      int sy = 12 + i * 28;
+      rendered_lines.push_back({lines[i], sx, sy});
+    }
+  }
 
   std::vector<uint8_t> payload;
   payload.reserve(canvas_width * 12);
@@ -348,18 +383,20 @@ bool L11BlePrinter::print_text(const std::string &text, float width_mm, float fe
           }
         }
 
-        // Text rendering centered horizontally around start_x, centered vertically around py: 36..52
-        if (py >= 36 && py < 52 && x >= start_x) {
-          int char_idx = (x - start_x) / 16;
-          int char_x = ((x - start_x) % 16) / 2;
-          int char_y = (py - 36) / 2;
+        // Multiline text rendering
+        for (const auto &lp : rendered_lines) {
+          if (py >= lp.start_y && py < lp.start_y + 16 && x >= lp.start_x) {
+            int char_idx = (x - lp.start_x) / 16;
+            int char_x = ((x - lp.start_x) % 16) / 2;
+            int char_y = (py - lp.start_y) / 2;
 
-          if (char_idx < (int)text.length() && char_x < 8 && char_y < 8) {
-            char c = text[char_idx];
-            if (c >= 32 && c <= 126) {
-              uint8_t font_row = FONT8x8_BASIC[c - 32][char_y];
-              if ((font_row >> (7 - char_x)) & 1) {
-                pixel = true;
+            if (char_idx < (int)lp.text.length() && char_x < 8 && char_y < 8) {
+              char c = lp.text[char_idx];
+              if (c >= 32 && c <= 126) {
+                uint8_t font_row = FONT8x8_BASIC[c - 32][char_y];
+                if ((font_row >> (7 - char_x)) & 1) {
+                  pixel = true;
+                }
               }
             }
           }
