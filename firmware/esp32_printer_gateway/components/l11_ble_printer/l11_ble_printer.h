@@ -33,8 +33,8 @@ class L11BlePrinter : public Component, public ble_client::BLEClientNode {
   bool print_raw(const std::vector<uint8_t> &data) { return print_raw(data.data(), data.size()); }
   bool print_text(const std::string &text, float width_mm = 38.7f, float feed_mm = 5.0f, uint8_t density = 3, bool border = true);
   bool print_test_label();
+  bool print_calibration_ruler(float max_mm = 50.0f);
   bool feed_to_gap();
-
   // Status & Telemetry
   bool is_connected() const {
     return this->parent_ != nullptr &&

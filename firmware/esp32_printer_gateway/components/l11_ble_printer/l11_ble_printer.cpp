@@ -497,6 +497,128 @@ bool L11BlePrinter::print_test_label() {
   return this->print_text("ESP32-C3 HUB OK", 38.7f, 5.0f, 3, true);
 }
 
+bool L11BlePrinter::print_calibration_ruler(float max_mm) {
+  uint16_t max_mm_int = (uint16_t)std::max(20, (int)max_mm);
+  uint16_t canvas_width = max_mm_int * 8;
+  std::vector<uint8_t> payload;
+  payload.reserve(canvas_width * 12);
+
+  std::string title = "P15 RULER (8 dots/mm)";
+
+  for (uint16_t x = 0; x < canvas_width; x++) {
+    bool is_tick_1mm = (x % 8 == 0);
+    bool is_tick_5mm = (x % 40 == 0);
+    bool is_tick_10mm = (x % 80 == 0);
+
+    for (int y_group = 88; y_group >= 0; y_group -= 8) {
+      uint8_t col_byte = 0;
+      for (int bit = 0; bit < 8; bit++) {
+        int py = y_group + bit;
+        bool pixel = false;
+
+        // Top ruler ticks
+        if (py == 6) {
+          pixel = true;
+        } else if (py > 6 && py <= 12 && is_tick_1mm) {
+          pixel = true;
+        } else if (py > 6 && py <= 18 && is_tick_5mm) {
+          pixel = true;
+        } else if (py > 6 && py <= 24 && is_tick_10mm) {
+          pixel = true;
+        }
+
+        // Bottom ruler ticks
+        if (py == 89) {
+          pixel = true;
+        } else if (py >= 83 && py < 89 && is_tick_1mm) {
+          pixel = true;
+        } else if (py >= 77 && py < 89 && is_tick_5mm) {
+          pixel = true;
+        } else if (py >= 71 && py < 89 && is_tick_10mm) {
+          pixel = true;
+        }
+
+        // Title in middle (py: 44..52)
+        if (py >= 44 && py < 52 && x >= 16) {
+          int char_idx = (x - 16) / 8;
+          int char_x = (x - 16) % 8;
+          int char_y = py - 44;
+          if (char_idx < (int)title.length() && char_x >= 0 && char_x < 8 && char_y >= 0 && char_y < 8) {
+            char c = title[char_idx];
+            if (c >= 32 && c <= 126) {
+              if ((FONT8x8_BASIC[c - 32][char_y] >> (7 - char_x)) & 1) {
+                pixel = true;
+              }
+            }
+          }
+        }
+
+        // Number labels below 10mm ticks (py: 26..34)
+        for (int m = 10; m <= max_mm_int; m += 10) {
+          int tx = m * 8;
+          std::string num_str = to_string(m);
+          int label_w = num_str.length() * 8;
+          int lx = tx - label_w / 2;
+          if (x >= lx && x < lx + label_w && py >= 26 && py < 34) {
+            int char_idx = (x - lx) / 8;
+            int char_x = (x - lx) % 8;
+            int char_y = py - 26;
+            if (char_idx < (int)num_str.length() && char_x >= 0 && char_x < 8 && char_y >= 0 && char_y < 8) {
+              char c = num_str[char_idx];
+              if (c >= '0' && c <= '9') {
+                if ((FONT8x8_BASIC[c - 32][char_y] >> (7 - char_x)) & 1) {
+                  pixel = true;
+                }
+              }
+            }
+          }
+        }
+
+        if (pixel) {
+          col_byte |= (1 << bit);
+        }
+      }
+      payload.push_back(col_byte);
+    }
+  }
+
+  // 1. Density
+  this->tx_queue_.push(std::vector<uint8_t>{0x1F, 0x70, 0x02, 0x03});
+  // 2. Init
+  this->tx_queue_.push(std::vector<uint8_t>{0x10, 0xFF, 0x40});
+  // 3. Wakeup & header
+  std::vector<uint8_t> header = {
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x10, 0xFF, 0xF1, 0x02,
+      0x1D, 0x76, 0x30, 0x00,
+      0x0C, 0x00,
+      (uint8_t)(canvas_width & 0xFF), (uint8_t)((canvas_width >> 8) & 0xFF)
+  };
+  this->tx_queue_.push(header);
+
+  // 4. Chunks
+  for (size_t i = 0; i < payload.size(); i += 90) {
+    size_t chunk_len = std::min((size_t)90, payload.size() - i);
+    this->tx_queue_.push(std::vector<uint8_t>(payload.begin() + i, payload.begin() + i + chunk_len));
+  }
+
+  // 5. Position to Gap (1D 0C)
+  this->tx_queue_.push(std::vector<uint8_t>{0x1D, 0x0C});
+
+  // 6. Stop
+  this->tx_queue_.push(std::vector<uint8_t>{0x10, 0xFF, 0xF1, 0x45});
+
+  this->total_job_chunks_ = this->tx_queue_.size();
+  this->sent_job_chunks_ = 0;
+  this->job_finished_time_ = 0;
+  if (this->parent_ != nullptr) {
+    this->parent_->set_enabled(true);
+  }
+  ESP_LOGI(TAG, "Queued calibration ruler print (%u packets, canvas_width=%u px / %u mm)",
+           (unsigned)this->total_job_chunks_, (unsigned)canvas_width, (unsigned)max_mm_int);
+  return true;
+}
 void L11BlePrinter::loop() {
   if (this->tcp_server_fd_ < 0) {
     this->init_tcp_server_();

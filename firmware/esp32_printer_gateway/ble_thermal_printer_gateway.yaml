@@ -46,6 +46,12 @@ api:
       then:
         - lambda: |-
             id(printer_hub).print_test_label();
+    - service: print_calibration_ruler
+      variables:
+        max_mm: float
+      then:
+        - lambda: |-
+            id(printer_hub).print_calibration_ruler(max_mm > 0.0f ? max_mm : 50.0f);
     - service: feed_gap
       then:
         - lambda: |-
