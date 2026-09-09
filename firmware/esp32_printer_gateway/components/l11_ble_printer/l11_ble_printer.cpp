@@ -111,11 +111,14 @@ static const uint8_t FONT8x8_BASIC[95][8] = {
 };
 
 void L11BlePrinter::setup() {
-  ESP_LOGI(TAG, "Setting up L11 BLE Printer Gateway...");
+  ESP_LOGI(TAG, "Setting up L11 BLE Printer Gateway (Standby Mode)...");
+  this->status_text_ = "STANDBY";
+  if (this->parent_ != nullptr) {
+    this->parent_->set_enabled(false);
+  }
 }
 
 void L11BlePrinter::dump_config() {
-  ESP_LOGCONFIG(TAG, "L11 BLE Printer Gateway:");
   if (this->parent_ != nullptr) {
     ESP_LOGCONFIG(TAG, "  BLE Address: %s", this->parent_->address_str());
   }
@@ -469,11 +472,13 @@ void L11BlePrinter::loop() {
     this->init_tcp_server_();
   }
 
-  // Auto-disconnect when idle
-  if (this->job_finished_time_ > 0 && this->tx_queue_.empty()) {
-    if (millis() - this->job_finished_time_ >= AUTO_DISCONNECT_DELAY_MS) {
+  // Auto-disconnect when connected and idle
+  if (this->is_connected() && this->tx_queue_.empty()) {
+    if (this->job_finished_time_ == 0) {
+      this->job_finished_time_ = millis();
+    } else if (millis() - this->job_finished_time_ >= AUTO_DISCONNECT_DELAY_MS) {
       this->job_finished_time_ = 0;
-      if (this->parent_ != nullptr && this->is_connected()) {
+      if (this->parent_ != nullptr) {
         ESP_LOGI(TAG, "Releasing BLE connection to allow other users/phones to connect.");
         this->parent_->set_enabled(false);
         this->status_text_ = "STANDBY";
