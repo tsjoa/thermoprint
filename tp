@@ -1,0 +1,114 @@
+#!/usr/bin/env python3
+"""
+tp — thin CLI client for the thermoprint web server.
+
+Detects whether a thermoprint web server (webserver.py) is reachable on
+the LAN, then walks through the same print/edit/cancel prompt as the
+local `thermoprint label -i` flow, sending the final text to the server
+over HTTP instead of printing over local BLE.
+"""
+
+import json
+import os
+import sys
+import urllib.error
+import urllib.request
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from thermoprint import format_label_preview
+
+SERVERS = [
+    "http://10.0.15.92:8420",
+    "http://ai.srv.terra15.lan:8420",
+]
+
+LOGO = r"""
+  🖨️   t h e r m o p r i n t
+"""
+
+
+def find_server(timeout=1.5):
+    for base in SERVERS:
+        try:
+            with urllib.request.urlopen(base + "/", timeout=timeout) as resp:
+                if resp.status == 200:
+                    return base
+        except Exception:
+            continue
+    return None
+
+
+def send_print(base, text):
+    data = json.dumps({"text": text}).encode()
+    req = urllib.request.Request(
+        base + "/print", data=data, headers={"Content-Type": "application/json"}
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        return json.loads(e.read().decode())
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+def main():
+    print(LOGO)
+
+    base = find_server()
+    if not base:
+        print("No thermoprint server found on the network (checked: "
+              f"{', '.join(SERVERS)}).")
+        print("Make sure webserver.py is running on one of those hosts.")
+        sys.exit(1)
+    print(f"Connected to {base}\n")
+
+    try:
+        current_text = input("Enter label text (use \\n for newlines):\n> ").strip()
+    except (KeyboardInterrupt, EOFError):
+        print("\nCancelled.")
+        sys.exit(0)
+
+    if not current_text:
+        print("Cancelled.")
+        sys.exit(0)
+    current_text = current_text.replace("\\n", "\n")
+
+    while True:
+        preview = format_label_preview(current_text, show_qr=True)
+        print("\nLabel Preview:")
+        print(preview)
+        print()
+        print("[Enter] Print  |  [e] Edit text  |  [q/Esc] Cancel")
+        try:
+            choice = input("> ").strip().lower()
+        except (KeyboardInterrupt, EOFError):
+            print("\nCancelled.")
+            sys.exit(0)
+
+        if choice in ("", "y", "p", "print", "yes"):
+            break
+        elif choice == "e":
+            print("\nEnter new text (use \\n for newlines):")
+            try:
+                new_input = input("> ").strip()
+                if new_input:
+                    current_text = new_input.replace("\\n", "\n")
+            except (KeyboardInterrupt, EOFError):
+                print("\nCancelled.")
+                sys.exit(0)
+        elif choice in ("q", "quit", "exit", "c", "cancel"):
+            print("Cancelled.")
+            sys.exit(0)
+
+    print("\nSending to printer...")
+    result = send_print(base, current_text)
+    if result.get("ok"):
+        print("Printed!")
+    else:
+        print(f"Error: {result.get('error')}")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
