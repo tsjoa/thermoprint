@@ -24,10 +24,14 @@ USB_PID = 0x00D1
 
 
 def find_usb_printer():
-    """Finds the USB printer using PyUSB."""
+    """Finds the USB printer using PyUSB. Returns None if no printer is
+    found, PyUSB isn't installed, or no USB backend (libusb) is available."""
     if not HAS_PYUSB:
         return None
-    return usb.core.find(idVendor=USB_VID, idProduct=USB_PID)
+    try:
+        return usb.core.find(idVendor=USB_VID, idProduct=USB_PID)
+    except usb.core.NoBackendError:
+        return None
 
 
 def send_usb_data(dev, data: bytes, chunk_size: int = 64, delay: float = 0.005) -> bool:

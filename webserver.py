@@ -100,6 +100,7 @@ class Handler(BaseHTTPRequestHandler):
                 text=True,
                 timeout=30,
             )
+            if result.returncode != 0:
                 raise RuntimeError((result.stdout + result.stderr).strip())
 
             response = {"ok": True}
