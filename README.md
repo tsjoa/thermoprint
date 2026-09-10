@@ -58,9 +58,11 @@ thermoprint serve -a 03:0D:7A:D6:5E:B1
 cd packages/web && bun run dev
 ```
 Open the web UI and select **Local** in the printer panel.
+*(See [P15-PRINTING.md](P15-PRINTING.md) and [p15_printing_chrome_linux.md](p15_printing_chrome_linux.md) for full context).*
 
-*(See [P15-PRINTING.md](P15-PRINTING.md) for full context).*
-
+**Option 3: Use the ESP32-C3 Wi-Fi BLE Gateway (ESPHome)**
+No Linux Bluetooth setup required. Deploy our custom ESPHome firmware to stream labels over Wi-Fi (Raw TCP Port 9100) or Home Assistant native API with on-demand connection and auto-disconnect.
+*(See [firmware/esp32_printer_gateway/README.md](firmware/esp32_printer_gateway/README.md))*.
 ---
 
 ## 🪟 Windows (Python CLI)

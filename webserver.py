@@ -16,7 +16,7 @@ PORT = 8420
 REPO_DIR = os.path.dirname(os.path.abspath(__file__))
 UV_BIN = shutil.which("uv") or os.path.expanduser("~/.local/bin/uv")
 PRINTER_ADDRESS = "5E:55:09:26:72:D3"  # P12_Z72D3_BLE
-
+from usb_print import find_usb_printer
 PAGE = """<!doctype html>
 <html>
 <head>
@@ -86,14 +86,20 @@ class Handler(BaseHTTPRequestHandler):
             if not text:
                 raise ValueError("Text is empty")
 
+            # Check if USB printer is connected first
+            usb_dev = find_usb_printer()
+            if usb_dev is not None:
+                cmd = [UV_BIN, "run", "python", "cli.py", "label", "--usb", text]
+            else:
+                cmd = [UV_BIN, "run", "thermoprint", "label", text, "-a", PRINTER_ADDRESS]
+
             result = subprocess.run(
-                [UV_BIN, "run", "thermoprint", "label", text, "-a", PRINTER_ADDRESS],
+                cmd,
                 cwd=REPO_DIR,
                 capture_output=True,
                 text=True,
                 timeout=30,
             )
-            if result.returncode != 0:
                 raise RuntimeError((result.stdout + result.stderr).strip())
 
             response = {"ok": True}

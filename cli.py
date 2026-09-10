@@ -6,6 +6,7 @@ Command-line tool to discover and print labels on Marklife P12 / P15 / P7 printe
 
 import argparse
 import asyncio
+import json
 import os
 import sys
 from PIL import Image
@@ -13,6 +14,21 @@ from PIL import Image
 from generate_label import generate_label
 from newprint_withfeed import construct_bitmap, bitmap_to_packet
 from thermoprint_ble import scan_printers, print_bitmap_bleak
+from usb_print import find_usb_printer, send_usb_data, build_l11_payload
+import socket
+
+def send_tcp_data(host: str, port: int, data: bytes) -> bool:
+    """Sends raw L11 print stream to an ESP32-C3 network printer gateway."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(10.0)
+        s.connect((host, port))
+        s.sendall(data)
+        s.close()
+        return True
+    except Exception as e:
+        print(f"Network Gateway Error ({host}:{port}): {e}", file=sys.stderr)
+        return False
 
 
 def cmd_discover(args):
@@ -129,6 +145,38 @@ def cmd_label(args):
             bitmap.convert("RGB").save(args.save_image)
             print(f"[DRY-RUN] Saved preview to {args.save_image}")
         return
+    if getattr(args, "gateway", None):
+        host_port = args.gateway.split(":")
+        host = host_port[0]
+        port = int(host_port[1]) if len(host_port) > 1 else 9100
+        print(f"Sending print job to ESP32-C3 Gateway at {host}:{port}...")
+        net_data = build_l11_payload(bitmap, feed_mm=args.feed_mm)
+        success = send_tcp_data(host, port, net_data)
+        if success:
+            print("Done (sent to ESP32-C3 Gateway over Wi-Fi)!")
+        else:
+            sys.exit(1)
+        return
+
+    if getattr(args, "usb", False):
+        dev = find_usb_printer()
+        if dev is None:
+            print("Error: No USB printer (09c7:00d1) found. Check USB cable/connection.", file=sys.stderr)
+            sys.exit(1)
+        print(f"Connecting to USB printer: ID {dev.idVendor:04x}:{dev.idProduct:04x}...")
+        usb_data = build_l11_payload(bitmap, feed_mm=args.feed_mm)
+        success = send_usb_data(dev, usb_data)
+        try:
+            import usb.util
+            usb.util.dispose_resources(dev)
+        except Exception:
+            pass
+        if success:
+            print("Done (printed over USB)!")
+        else:
+            print("USB print failed.", file=sys.stderr)
+            sys.exit(1)
+        return
 
     address = asyncio.run(resolve_address(args.address))
     print(f"Connecting to printer at {address}...")
@@ -162,10 +210,41 @@ def cmd_print_image(args):
     if args.dry_run:
         print(f"[DRY-RUN] Image {args.file}: {img.size[0]}x{img.size[1]} px, {len(payload)} bytes payload.")
         return
+    if getattr(args, "gateway", None):
+        host_port = args.gateway.split(":")
+        host = host_port[0]
+        port = int(host_port[1]) if len(host_port) > 1 else 9100
+        print(f"Sending image to ESP32-C3 Gateway at {host}:{port}...")
+        net_data = build_l11_payload(img, feed_mm=args.feed_mm)
+        success = send_tcp_data(host, port, net_data)
+        if success:
+            print("Done (sent to ESP32-C3 Gateway over Wi-Fi)!")
+        else:
+            sys.exit(1)
+        return
+
+    if getattr(args, "usb", False):
+        dev = find_usb_printer()
+        if dev is None:
+            print("Error: No USB printer (09c7:00d1) found. Check USB cable/connection.", file=sys.stderr)
+            sys.exit(1)
+        print(f"Connecting to USB printer: ID {dev.idVendor:04x}:{dev.idProduct:04x}...")
+        usb_data = build_l11_payload(img, feed_mm=args.feed_mm)
+        success = send_usb_data(dev, usb_data)
+        try:
+            import usb.util
+            usb.util.dispose_resources(dev)
+        except Exception:
+            pass
+        if success:
+            print("Done (printed over USB)!")
+        else:
+            print("USB print failed.", file=sys.stderr)
+            sys.exit(1)
+        return
 
     address = asyncio.run(resolve_address(args.address))
     print(f"Connecting to printer at {address}...")
-
     asyncio.run(
         print_bitmap_bleak(
             address=address,
@@ -192,9 +271,82 @@ def cmd_power_off(args):
     print("Auto-power off setting updated successfully!")
 
 
+def cmd_calibrate(args):
+    """Runs deterministic roll calibration with a 10cm ruler."""
+    import calibrate
+    if args.show:
+        cal = calibrate.load_calibration()
+        print("\nCurrent Saved Calibration:")
+        print(json.dumps(cal, indent=2))
+        return
+
+    if args.set_mm:
+        cal = calibrate.save_calibration(args.set_mm)
+        print(f"\nSaved calibration for {args.set_mm}mm roll:")
+        print(f"  -> Printable Width: {cal['printable_width_mm']} mm ({cal['printable_width_px']} px)")
+        return
+
+    print("==========================================================")
+    print("      DETERMINISTIC BLE PRINTER ROLL CALIBRATION         ")
+    print("==========================================================")
+    print(f"Step 1: Printing a 10cm ({args.span_mm}mm) ruler across your label roll.")
+    print("        The printer will automatically halt at the gap.\n")
+
+    try:
+        asyncio.run(calibrate.run_ruler_print(args.gateway, max_mm=args.span_mm))
+    except Exception as e:
+        print(f"Error printing calibration ruler: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    print("\n----------------------------------------------------------")
+    print("Step 2: Inspect the FIRST label that came out.")
+    print("        Find the millimeter number printed right before the")
+    print("        gap / cut edge of label #1.")
+    print("----------------------------------------------------------")
+
+    while True:
+        try:
+            val = input("\nEnter observed length in mm (e.g. 42, 30, 50): ").strip()
+            if not val:
+                continue
+            physical_mm = float(val)
+            if physical_mm <= 5 or physical_mm > 200:
+                print("Please enter a realistic label length between 10mm and 150mm.")
+                continue
+            break
+        except ValueError:
+            print("Invalid number. Please enter a numerical value (e.g. 42 or 42.5).")
+        except (KeyboardInterrupt, EOFError):
+            print("\nCalibration cancelled.")
+            sys.exit(0)
+
+    cal = calibrate.save_calibration(physical_mm)
+    print("\n==========================================================")
+    print("               CALIBRATION SUCCESSFUL                     ")
+    print("==========================================================")
+    print(f"  * Physical Roll Length:  {cal['physical_length_mm']} mm")
+    print(f"  * Margin Allowance:      {cal['margin_total_mm']} mm (1.65mm on each end)")
+    print(f"  * Calibrated Width:      {cal['printable_width_mm']} mm ({cal['printable_width_px']} px)")
+    print(f"  * Saved Configuration:   {calibrate.CONFIG_FILE}")
+    print("==========================================================\n")
+
+    confirm = input("Would you like to print a confirmation test label now? (y/n): ").strip().lower()
+    if confirm in ("y", "yes", ""):
+        asyncio.run(calibrate.run_confirmation_print(args.gateway, cal["printable_width_mm"], cal["physical_length_mm"]))
+        print("Confirmation test printed!")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Thermoprint CLI — Cross-platform Bluetooth thermal printer tool")
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    # Calibrate subcommand
+    p_cal = subparsers.add_parser("calibrate", help="Interactively calibrate loaded roll dimensions using a 50mm ruler")
+    p_cal.add_argument("-g", "--gateway", default="192.168.20.18", help="ESP32 Gateway IP address (default: 192.168.20.18)")
+    p_cal.add_argument("--span-mm", type=float, default=50.0, help="Ruler length in mm (default: 50mm / 5cm)")
+    p_cal.add_argument("--show", action="store_true", help="Show current saved calibration and exit")
+    p_cal.add_argument("--set-mm", type=float, help="Manually set physical roll length in mm without printing ruler")
+    p_cal.set_defaults(func=cmd_calibrate)
 
     # Discover subcommand
     p_disc = subparsers.add_parser("discover", help="Scan for nearby BLE thermal printers")
@@ -232,6 +384,8 @@ def main():
     p_label.add_argument("--dry-run", action="store_true", help="Render only, do not send to printer")
     p_label.add_argument("--save-image", help="Save rendered label as image file")
     p_label.set_defaults(func=cmd_label)
+    p_label.add_argument("-u", "--usb", action="store_true", help="Print directly via USB instead of Bluetooth")
+    p_label.add_argument("-g", "--gateway", metavar="IP[:PORT]", help="Send print job over Wi-Fi to ESP32-C3 BLE gateway (e.g. 192.168.20.18)")
 
     # Print subcommand
     p_print = subparsers.add_parser("print", help="Print an image file")
@@ -242,6 +396,8 @@ def main():
     p_print.add_argument("--dry-run", action="store_true", help="Render only, do not send to printer")
     p_print.set_defaults(func=cmd_print_image)
 
+    p_print.add_argument("-u", "--usb", action="store_true", help="Print directly via USB instead of Bluetooth")
+    p_print.add_argument("-g", "--gateway", metavar="IP[:PORT]", help="Send print job over Wi-Fi to ESP32-C3 BLE gateway (e.g. 192.168.20.18)")
     args = parser.parse_args()
     try:
         args.func(args)

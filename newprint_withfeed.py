@@ -202,19 +202,15 @@ def send_print_job(peripheral, bitmap, segmented_paper=False, feed_mm=5.0):
             payload,
         ]
 
-        # Feed feed_dots dots to advance paper (ESC J)
-        packets.append(bytes([0x1b, 0x4a, feed_dots]))
-
         if segmented_paper:
             packets.extend([
-                bytes([0x1d, 0x0c, 0x10]),
-                bytes([0xff, 0xf1, 0x45]),
-                bytes([0x10, 0xff, 0x40]),
-                bytes([0x10, 0xff, 0x40]),
+                bytes([0x1D, 0x0C]),
+                bytes([0x10, 0xFF, 0xF1, 0x45]),
             ])
         else:
             packets.extend([
-                bytes([0x10, 0xff, 0xf1, 0x45])
+                bytes([0x1B, 0x4A, feed_dots]),
+                bytes([0x10, 0xFF, 0xF1, 0x45]),
             ])
 
         # Send packets in chunks
