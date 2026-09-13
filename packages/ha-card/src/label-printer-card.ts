@@ -296,9 +296,9 @@ export class LabelPrinterCard extends HTMLElement {
           padding: 8px 10px;
           font-size: 0.92rem;
           border-radius: 6px;
-          border: 1px solid var(--divider-color, #ccc);
-          background: var(--card-background-color, #fff);
-          color: var(--primary-text-color, #000);
+          border: 1px solid var(--divider-color, rgba(128, 128, 128, 0.25));
+          background: var(--card-background-color, var(--ha-card-background, #ffffff));
+          color: var(--primary-text-color, inherit);
           resize: vertical;
           min-height: 64px;
           font-family: inherit;
@@ -320,27 +320,33 @@ export class LabelPrinterCard extends HTMLElement {
           font-size: 0.75rem;
           padding: 4px 10px;
           border-radius: 14px;
-          background: var(--secondary-background-color, #f0f2f5);
-          color: var(--primary-text-color, #333);
-          border: 1px solid var(--divider-color, #e0e0e0);
+          background: var(--secondary-background-color, rgba(128, 128, 128, 0.12));
+          color: var(--primary-text-color, inherit);
+          border: 1px solid var(--divider-color, rgba(128, 128, 128, 0.2));
           cursor: pointer;
-        .scan-btn:hover {
-          background: rgba(3, 169, 244, 0.12);
+          user-select: none;
+          transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
         }
+        .chip:hover {
+          background: var(--primary-color, #03a9f4);
+          color: #ffffff;
+          border-color: var(--primary-color, #03a9f4);
+        }
+
+        /* Custom Dimensions Panel */
         .custom-dims-panel {
-          background: var(--secondary-background-color, #fafafa);
-          border: 1px solid var(--divider-color, #e0e0e0);
+          background: var(--secondary-background-color, rgba(128, 128, 128, 0.08));
+          border: 1px solid var(--divider-color, rgba(128, 128, 128, 0.2));
           border-radius: 6px;
-          padding: 8px 10px;
+          padding: 10px 12px;
+          margin-top: 6px;
           margin-bottom: 12px;
           display: grid;
           grid-template-columns: 1fr 1fr;
           gap: 10px;
         }
-        .chip:hover {
-          background: var(--primary-color, #03a9f4);
-          color: #fff;
-          border-color: var(--primary-color, #03a9f4);
+        @media (max-width: 480px) {
+          .custom-dims-panel { grid-template-columns: 1fr; }
         }
 
         /* Grid Controls */
@@ -361,7 +367,7 @@ export class LabelPrinterCard extends HTMLElement {
         .control-group label {
           font-size: 0.78rem;
           font-weight: 500;
-          color: var(--secondary-text-color, #666);
+          color: var(--secondary-text-color, #888);
         }
         select, input[type="text"], input[type="number"] {
           box-sizing: border-box;
@@ -369,30 +375,38 @@ export class LabelPrinterCard extends HTMLElement {
           padding: 6px 8px;
           font-size: 0.85rem;
           border-radius: 6px;
-          border: 1px solid var(--divider-color, #ccc);
-          background: var(--card-background-color, #fff);
-          color: var(--primary-text-color, #000);
+          border: 1px solid var(--divider-color, rgba(128, 128, 128, 0.25));
+          background: var(--card-background-color, var(--ha-card-background, #ffffff));
+          color: var(--primary-text-color, inherit);
+          font-family: inherit;
         }
         select:focus, input:focus {
           outline: none;
           border-color: var(--primary-color, #03a9f4);
+          box-shadow: 0 0 0 2px rgba(3, 169, 244, 0.2);
         }
+        select option {
+          background: var(--card-background-color, var(--ha-card-background, #ffffff));
+          color: var(--primary-text-color, inherit);
+        }
+
         .scan-btn {
+          font-size: 0.72rem;
           font-weight: 600;
           padding: 2px 8px;
           border-radius: 10px;
-          background: var(--secondary-background-color, #eceff1);
+          background: var(--secondary-background-color, rgba(128, 128, 128, 0.12));
           color: var(--primary-color, #03a9f4);
-          border: 1px solid var(--divider-color, #cfd8dc);
+          border: 1px solid var(--divider-color, rgba(128, 128, 128, 0.25));
           cursor: pointer;
           display: inline-flex;
           align-items: center;
           gap: 4px;
           user-select: none;
-          transition: background 0.15s;
+          transition: background 0.15s, color 0.15s;
         }
         .scan-btn:hover {
-          background: rgba(3, 169, 244, 0.12);
+          background: rgba(3, 169, 244, 0.15);
         }
 
         /* Checkbox Rows */
@@ -403,7 +417,7 @@ export class LabelPrinterCard extends HTMLElement {
           font-size: 0.85rem;
           cursor: pointer;
           user-select: none;
-          margin-top: 4px;
+          margin-top: 6px;
         }
         .toggle-row input[type="checkbox"] {
           width: 16px;
@@ -413,11 +427,12 @@ export class LabelPrinterCard extends HTMLElement {
 
         /* QR Sub-Panel */
         .qr-panel {
-          background: var(--secondary-background-color, #fafafa);
-          border: 1px solid var(--divider-color, #eee);
+          background: var(--secondary-background-color, rgba(128, 128, 128, 0.08));
+          border: 1px solid var(--divider-color, rgba(128, 128, 128, 0.2));
           border-radius: 6px;
           padding: 8px 10px;
           margin-top: 6px;
+          margin-bottom: 8px;
           display: flex;
           flex-direction: column;
           gap: 6px;
@@ -428,21 +443,21 @@ export class LabelPrinterCard extends HTMLElement {
           display: flex;
           border-radius: 6px;
           overflow: hidden;
-          border: 1px solid var(--divider-color, #ccc);
+          border: 1px solid var(--divider-color, rgba(128, 128, 128, 0.25));
         }
         .segmented-btn {
           flex: 1;
           padding: 6px 0;
           font-size: 0.78rem;
           text-align: center;
-          background: var(--card-background-color, #fff);
-          color: var(--primary-text-color, #333);
+          background: var(--card-background-color, var(--ha-card-background, #ffffff));
+          color: var(--primary-text-color, inherit);
           border: none;
           cursor: pointer;
           transition: background 0.15s, color 0.15s;
         }
         .segmented-btn + .segmented-btn {
-          border-left: 1px solid var(--divider-color, #ccc);
+          border-left: 1px solid var(--divider-color, rgba(128, 128, 128, 0.25));
         }
         .segmented-btn.active {
           background: var(--primary-color, #03a9f4);
@@ -480,8 +495,8 @@ export class LabelPrinterCard extends HTMLElement {
           color: #ffffff;
         }
         .btn-secondary {
-          background: var(--secondary-background-color, #eceff1);
-          color: var(--primary-text-color, #37474f);
+          background: var(--secondary-background-color, rgba(128, 128, 128, 0.12));
+          color: var(--primary-text-color, inherit);
         }
         .btn:disabled {
           opacity: 0.6;
@@ -591,8 +606,8 @@ export class LabelPrinterCard extends HTMLElement {
 
         <!-- Media & Printer Grid -->
         <div class="section-label">Print & Media Settings</div>
+        <div class="controls-grid">
           <div class="control-group">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
               <label>Target Printer:</label>
               <button id="btn-scan" class="scan-btn" title="Scan for nearby BLE printers">
                 <span id="scan-icon">🔍</span> <span id="scan-text">Scan</span>
