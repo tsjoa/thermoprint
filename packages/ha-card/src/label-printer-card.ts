@@ -103,9 +103,29 @@ export class LabelPrinterCard extends HTMLElement {
     return 7;
   }
 
+  
+  private getServicePrefix(): string {
+    const services = (this._hass as any)?.services?.["esphome"] || {};
+    if ("ble_water_timer_gateway_print_bitmap" in services || "ble_water_timer_gateway_scan_printers" in services) {
+      return "ble_water_timer_gateway";
+    }
+    if (`${this.getServicePrefix()}_print_bitmap` in services || `${this.getServicePrefix()}_scan_printers` in services) {
+      return "ble_printer_gateway";
+    }
+    for (const s of Object.keys(services)) {
+      if (s.endsWith("_print_bitmap")) {
+        return s.replace("_print_bitmap", "");
+      }
+    }
+    return "ble_water_timer_gateway";
+  }
+
   private updateGatewayStatus() {
     if (!this._hass) return;
-    const ipEntity = this._hass.states["sensor.ble_thermal_printer_gateway_printer_gateway_ip"];
+    const ipEntity = this._hass.states["sensor.living_room_ble_water_timer_gateway_gateway_ip_address"] ||
+                     this._hass.states["sensor.ble_water_timer_gateway_gateway_ip_address"] ||
+                     this._hass.states["sensor.ble_thermal_printer_gateway_printer_gateway_ip"] ||
+                     this._hass.states["sensor.living_room_ble_water_timer_printer_gateway_gateway_ip_address"];
     const statusBadge = this.root.getElementById("gateway-badge");
     if (statusBadge && ipEntity) {
       statusBadge.innerHTML = `<span class="dot online"></span> Gateway ${ipEntity.state || "192.168.20.18"}`;
@@ -115,7 +135,9 @@ export class LabelPrinterCard extends HTMLElement {
 
   private updateDiscoveredPrinters() {
     if (!this._hass) return;
-    const sensor = this._hass.states["sensor.ble_thermal_printer_gateway_discovered_ble_printers"];
+    const sensor = this._hass.states["sensor.living_room_ble_water_timer_printer_gateway_discovered_ble_printers"] ||
+                   this._hass.states["sensor.ble_water_timer_gateway_discovered_ble_printers"] ||
+                   this._hass.states["sensor.ble_thermal_printer_gateway_discovered_ble_printers"];
     if (!sensor || !sensor.state) return;
 
     try {
@@ -775,7 +797,7 @@ export class LabelPrinterCard extends HTMLElement {
       if (scanText) scanText.textContent = "Scanning...";
 
       try {
-        await this._hass.callService("esphome", "ble_printer_gateway_scan_printers", {});
+        await this._hass.callService("esphome", `${this.getServicePrefix()}_scan_printers`, {});
         this.setStatus("loading", "Scanning for nearby BLE printers (3s)...");
       } catch (err: unknown) {
         console.warn("Scan service error:", err);
@@ -809,7 +831,7 @@ export class LabelPrinterCard extends HTMLElement {
       localStorage.setItem("thermoprint_selected_printer", this.selectedPrinter);
       if (this._hass) {
         try {
-          await this._hass.callService("esphome", "ble_printer_gateway_set_target_printer", {
+          await this._hass.callService("esphome", `${this.getServicePrefix()}_set_target_printer`, {
             mac_address: this.selectedPrinter,
           });
           this.setStatus("success", `Target printer set to ${this.selectedPrinter}`);
@@ -1090,7 +1112,7 @@ export class LabelPrinterCard extends HTMLElement {
       }
       const b64Data = btoa(binary);
 
-      await this._hass.callService("esphome", "ble_printer_gateway_print_bitmap", {
+      await this._hass.callService("esphome", `${this.getServicePrefix()}_print_bitmap`, {
         bitmap_data: b64Data,
         canvas_width: canvasWidth,
         feed_mm: this.feedMm,
@@ -1111,7 +1133,7 @@ export class LabelPrinterCard extends HTMLElement {
     if (!this._hass) return;
     this.setStatus("loading", "Advancing paper roll to next gap...");
     try {
-      await this._hass.callService("esphome", "ble_printer_gateway_feed_gap", {});
+      await this._hass.callService("esphome", `${this.getServicePrefix()}_feed_gap`, {});
       this.setStatus("success", "✓ Paper advanced to optical gap.");
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err);
@@ -1123,7 +1145,7 @@ export class LabelPrinterCard extends HTMLElement {
     if (!this._hass) return;
     this.setStatus("loading", "Printing gateway test label...");
     try {
-      await this._hass.callService("esphome", "ble_printer_gateway_print_test_label", {});
+      await this._hass.callService("esphome", `${this.getServicePrefix()}_print_test_label`, {});
       this.setStatus("success", "✓ Test label printed.");
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err);
