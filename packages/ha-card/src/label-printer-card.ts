@@ -860,16 +860,57 @@ export class LabelPrinterCard extends HTMLElement {
       return;
     }
 
+    if (!this.canvas) {
+      this.setStatus("error", "Preview canvas not initialized.");
+      return;
+    }
+
     this.setStatus("loading", "Connecting to ESP32 Gateway and printing...");
 
     try {
-      await this._hass.callService("esphome", "ble_printer_gateway_print_text", {
-        label_text: this.text,
-        width_mm: this.widthMm,
+      const canvasWidth = this.canvas.width;
+      const canvasHeight = this.canvas.height;
+      const ctx = this.canvas.getContext("2d");
+      if (!ctx) throw new Error("Could not acquire canvas 2D context");
+
+      const imgData = ctx.getImageData(0, 0, canvasWidth, canvasHeight);
+      const colBytes: number[] = [];
+      for (let x = 0; x < canvasWidth; x++) {
+        for (let yGroup = 88; yGroup >= 0; yGroup -= 8) {
+          let colByte = 0;
+          for (let bit = 0; bit < 8; bit++) {
+            const py = yGroup + bit;
+            if (py < canvasHeight) {
+              const pixelIdx = (py * canvasWidth + x) * 4;
+              const r = imgData.data[pixelIdx];
+              const g = imgData.data[pixelIdx + 1];
+              const b = imgData.data[pixelIdx + 2];
+              if ((r + g + b) / 3 < 128) {
+                colByte |= (1 << bit);
+              }
+            }
+          }
+          colBytes.push(colByte);
+        }
+      }
+
+      let binary = "";
+      const len = colBytes.length;
+      for (let i = 0; i < len; i++) {
+        binary += String.fromCharCode(colBytes[i]);
+      }
+      const b64Data = btoa(binary);
+
+      await this._hass.callService("esphome", "ble_printer_gateway_print_bitmap", {
+        bitmap_data: b64Data,
+        canvas_width: canvasWidth,
         feed_mm: this.feedMm,
         density: this.density,
+        paper_type: this.paperType,
         printer_mac: this.selectedPrinter,
       });
+
+      this.setStatus("success", "✓ Label sent & printed successfully!");
     } catch (err: unknown) {
       console.error("Print service error:", err);
       const errMsg = err instanceof Error ? err.message : String(err);

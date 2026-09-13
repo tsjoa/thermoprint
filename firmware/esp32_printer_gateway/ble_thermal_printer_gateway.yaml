@@ -33,19 +33,38 @@ api:
   encryption:
     key: !secret api_encryption_key
   services:
-    - service: print_text
+    - service: print_bitmap
       variables:
-        label_text: string
-        width_mm: float
+        bitmap_data: string
+        canvas_width: int
         feed_mm: float
         density: int
+        paper_type: string
         printer_mac: string
       then:
         - lambda: |-
             if (!printer_mac.empty()) {
               id(printer_hub).set_target_mac(printer_mac);
             }
-            id(printer_hub).print_text(label_text, (width_mm > 0.0f ? width_mm : 38.7f), feed_mm, density, true);
+            bool is_gap = (paper_type != "continuous");
+            uint16_t w = (canvas_width > 0) ? (uint16_t)canvas_width : 310;
+            id(printer_hub).print_bitmap(bitmap_data, w, feed_mm, (uint8_t)density, is_gap);
+    - service: print_text
+      variables:
+        label_text: string
+        width_mm: float
+        feed_mm: float
+        density: int
+        border: bool
+        paper_type: string
+        printer_mac: string
+      then:
+        - lambda: |-
+            if (!printer_mac.empty()) {
+              id(printer_hub).set_target_mac(printer_mac);
+            }
+            bool is_gap = (paper_type != "continuous");
+            id(printer_hub).print_text(label_text, (width_mm > 0.0f ? width_mm : 38.7f), feed_mm, density, border, is_gap);
     - service: set_target_printer
       variables:
         mac_address: string

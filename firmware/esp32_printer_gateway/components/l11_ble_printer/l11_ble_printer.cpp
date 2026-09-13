@@ -340,7 +340,109 @@ float L11BlePrinter::get_progress() const {
   return (float)this->sent_job_chunks_ / (float)this->total_job_chunks_ * 100.0f;
 }
 
-bool L11BlePrinter::print_text(const std::string &text, float width_mm, float feed_mm, uint8_t density, bool border) {
+bool L11BlePrinter::is_p12() const {
+  return this->target_mac_.find("5E:55:09") != std::string::npos ||
+         this->target_mac_.find("5e:55:09") != std::string::npos ||
+         this->status_text_.find("P12") != std::string::npos;
+}
+
+static std::vector<uint8_t> decode_base64(const std::string &in) {
+  std::vector<uint8_t> out;
+  static const int T[256] = {
+      -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+      -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+      -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,62,-1,-1,-1,63,
+      52,53,54,55,56,57,58,59,60,61,-1,-1,-1,-1,-1,-1,
+      -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,11,12,13,14,
+      15,16,17,18,19,20,21,22,23,24,25,-1,-1,-1,-1,-1,
+      -1,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,
+      41,42,43,44,45,46,47,48,49,50,51,-1,-1,-1,-1,-1,
+      -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+      -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+      -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+      -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+      -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+      -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+      -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+      -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1
+  };
+  int val = 0, valb = -8;
+  for (uint8_t c : in) {
+    if (T[c] == -1) {
+      if (c == '=') break;
+      continue;
+    }
+    val = (val << 6) + T[c];
+    valb += 6;
+    if (valb >= 0) {
+      out.push_back(uint8_t((val >> valb) & 0xFF));
+      valb -= 8;
+    }
+  }
+  return out;
+}
+
+bool L11BlePrinter::print_bitmap(const std::string &b64_data, uint16_t canvas_width, float feed_mm, uint8_t density, bool is_gap) {
+  std::vector<uint8_t> payload = decode_base64(b64_data);
+  if (payload.empty() || canvas_width == 0) {
+    ESP_LOGE(TAG, "Empty bitmap payload or invalid width (%u)", canvas_width);
+    return false;
+  }
+
+  uint8_t feed_dots = (uint8_t)std::max(0, std::min(255, (int)std::round(feed_mm * 8.0f)));
+
+  // 1. Density / Thickness
+  if (this->is_p12()) {
+    uint8_t tt = (density <= 1) ? 0 : ((density == 2) ? 1 : 2);
+    this->tx_queue_.push(std::vector<uint8_t>{0x10, 0xFF, 0x10, 0x00, tt});
+  } else {
+    if (density > 0) {
+      this->tx_queue_.push(std::vector<uint8_t>{0x1F, 0x70, 0x02, (uint8_t)std::min((int)density, 5)});
+    }
+  }
+
+  // 2. Init
+  this->tx_queue_.push(std::vector<uint8_t>{0x10, 0xFF, 0x40});
+
+  // 3. Wakeup & header (27 bytes)
+  std::vector<uint8_t> header = {
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x10, 0xFF, 0xF1, 0x02,
+      0x1D, 0x76, 0x30, 0x00,
+      0x0C, 0x00,
+      (uint8_t)(canvas_width & 0xFF), (uint8_t)((canvas_width >> 8) & 0xFF)
+  };
+  this->tx_queue_.push(header);
+
+  // 4. Bitmap payload chunked in max 90-byte slices
+  for (size_t i = 0; i < payload.size(); i += 90) {
+    size_t chunk_len = std::min((size_t)90, payload.size() - i);
+    this->tx_queue_.push(std::vector<uint8_t>(payload.begin() + i, payload.begin() + i + chunk_len));
+  }
+
+  // 5. Paper feed: Optical gap (1D 0C) vs Continuous dot feed (1B 4A <dots>)
+  if (is_gap) {
+    this->tx_queue_.push(std::vector<uint8_t>{0x1D, 0x0C});
+  } else {
+    this->tx_queue_.push(std::vector<uint8_t>{0x1B, 0x4A, feed_dots});
+  }
+
+  // 6. Stop / flush
+  this->tx_queue_.push(std::vector<uint8_t>{0x10, 0xFF, 0xF1, 0x45});
+
+  this->total_job_chunks_ = this->tx_queue_.size();
+  this->sent_job_chunks_ = 0;
+  this->job_finished_time_ = 0;
+  if (this->parent_ != nullptr) {
+    this->parent_->set_enabled(true);
+  }
+  ESP_LOGI(TAG, "Queued raw bitmap print job (%u packets, canvas_width=%u px, payload=%u bytes, is_gap=%d)",
+           (unsigned)this->total_job_chunks_, (unsigned)canvas_width, (unsigned)payload.size(), (int)is_gap);
+  return true;
+}
+
+bool L11BlePrinter::print_text(const std::string &text, float width_mm, float feed_mm, uint8_t density, bool border, bool is_gap) {
   // 1. Split into lines and clamp to maximum 3 lines
   std::vector<std::string> lines;
   std::string cur_line = "";
@@ -459,9 +561,15 @@ bool L11BlePrinter::print_text(const std::string &text, float width_mm, float fe
     }
   }
 
-  // 1. Density
-  this->tx_queue_.push(std::vector<uint8_t>{0x1F, 0x70, 0x02, density});
-  // 2. Init
+  // 1. Density / Thickness
+  if (this->is_p12()) {
+    uint8_t tt = (density <= 1) ? 0 : ((density == 2) ? 1 : 2);
+    this->tx_queue_.push(std::vector<uint8_t>{0x10, 0xFF, 0x10, 0x00, tt});
+  } else {
+    if (density > 0) {
+      this->tx_queue_.push(std::vector<uint8_t>{0x1F, 0x70, 0x02, (uint8_t)std::min((int)density, 5)});
+    }
+  }
   this->tx_queue_.push(std::vector<uint8_t>{0x10, 0xFF, 0x40});
   // 3. Wakeup & header (27 bytes)
   std::vector<uint8_t> header = {
@@ -480,9 +588,13 @@ bool L11BlePrinter::print_text(const std::string &text, float width_mm, float fe
     this->tx_queue_.push(std::vector<uint8_t>(payload.begin() + i, payload.begin() + i + chunk_len));
   }
 
-  // 5. Position to next gap (1D 0C)
-  this->tx_queue_.push(std::vector<uint8_t>{0x1D, 0x0C});
-
+  // 5. Paper feed: Optical gap (1D 0C) vs Continuous dot feed (1B 4A <dots>)
+  uint8_t feed_dots = (uint8_t)std::max(0, std::min(255, (int)std::round(feed_mm * 8.0f)));
+  if (is_gap) {
+    this->tx_queue_.push(std::vector<uint8_t>{0x1D, 0x0C});
+  } else {
+    this->tx_queue_.push(std::vector<uint8_t>{0x1B, 0x4A, feed_dots});
+  }
   // 6. Stop / flush
   this->tx_queue_.push(std::vector<uint8_t>{0x10, 0xFF, 0xF1, 0x45});
 

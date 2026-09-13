@@ -31,12 +31,14 @@ class L11BlePrinter : public Component, public ble_client::BLEClientNode {
   // Print APIs
   bool print_raw(const uint8_t *data, size_t len);
   bool print_raw(const std::vector<uint8_t> &data) { return print_raw(data.data(), data.size()); }
-  bool print_text(const std::string &text, float width_mm = 38.7f, float feed_mm = 5.0f, uint8_t density = 3, bool border = true);
+  bool print_text(const std::string &text, float width_mm = 38.7f, float feed_mm = 5.0f, uint8_t density = 3, bool border = true, bool is_gap = true);
+  bool print_bitmap(const std::string &b64_data, uint16_t canvas_width, float feed_mm = 5.0f, uint8_t density = 3, bool is_gap = true);
   bool print_test_label();
   bool print_calibration_ruler(float max_mm = 50.0f);
   bool feed_to_gap();
   void set_target_mac(const std::string &mac_str);
   const std::string &get_target_mac() const { return this->target_mac_; }
+  bool is_p12() const;
   // Status & Telemetry
   bool is_connected() const {
     return this->parent_ != nullptr &&
