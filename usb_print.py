@@ -54,6 +54,9 @@ class USBPrinterDevice:
     def is_p12(self) -> bool:
         return self.idProduct == 0x0011 or "p12" in self.product.lower()
 
+    @property
+    def is_p15(self) -> bool:
+        return self.idProduct == 0x00D1 or "p15" in self.product.lower() or "yc3121" in self.product.lower()
     def __repr__(self):
         source = self.lp_path if self.lp_path else "PyUSB"
         return f"<USBPrinter {self.idVendor:04x}:{self.idProduct:04x} ({self.manufacturer} {self.product}) via {source}>"
@@ -382,7 +385,11 @@ def print_usb_label(
 
     print(f"Found USB printer: {printer}")
 
-    # Query info if available
+    if printer.is_p15:
+        print("WARNING: Detected Pristar / Marklife P15 (09c7:00d1 / YICHIP YC3121).", file=sys.stderr)
+        print("Note: The P15 factory firmware leaves the USB descriptor open but does NOT route USB data", file=sys.stderr)
+        print("to the thermal printhead. USB printing is non-functional on P15 without a firmware update.", file=sys.stderr)
+        print("Please use Bluetooth Low Energy (cli.py label -a <MAC>) or the ESP32-C3 Wi-Fi Gateway instead.\n", file=sys.stderr)
     info = query_printer_info(printer)
     if info.get("model") != "Unknown":
         print(f"Device Info: Model={info['model']}, Firmware={info['firmware']}, Battery={info['battery']}, Status={info['status']}")

@@ -6,6 +6,21 @@ Printing to the P15 (MAC `03:0D:7A:D6:5E:B1`) requires bypassing BlueZ entirely
 and using `bluepy-helper` for raw HCI LE connections. The reference implementation
 is `newprint_withfeed.py`.
 
+### Can the P15 Print Over USB? (No — Hardware/Firmware Limitation)
+
+**Definitive Answer: No.**
+
+When plugged into a computer via USB, the P15 does physically enumerate on the USB bus:
+- **USB ID**: `09c7:00d1`
+- **Device String**: `YICHIP YC3121 Printer demo` (vendor: `YICHIP`)
+- **Interface**: `bInterfaceClass = 0x07` (Printer), attaching to Linux `/dev/usb/lp*`.
+
+However:
+1. **Unrouted Data Pipe**: The P15 uses a **YiChip YC3121** Bluetooth 5.0 SoC. The manufacturer flashed stock YiChip SDK evaluation code that exposes the USB descriptor, but **the internal firmware never feeds data from the USB Bulk OUT endpoint (0x01) into the thermal print engine**.
+2. **Silent IN Endpoint**: Endpoint `0x81` (Bulk IN) does not respond to any status queries, handshake packets, or commands (L11, ESC/POS, TSPL, or Niimbot protocols all time out).
+3. **Comparison with P12**: The P12 uses a **Bluetrum** SoC with a completely functional USB Printer Class implementation (`09c7:0011`, `MFG: YXWL`, `MDL: P12`) that responds bidirectionally to queries and prints over USB natively. The P15's firmware is mobile/Bluetooth-only.
+
+**Conclusion**: Unless Marklife/Pristar releases a firmware update with an active USB print queue, **the P15 cannot be steered over USB**. All PC and server automation for the P15 must use either **Bluetooth Low Energy (via `bluepy-helper` / `newprint_withfeed.py`)** or the dedicated **ESP32-C3 Wi-Fi BLE Gateway**.
 ### The Dual-Mode BlueZ Bug (br-connection-profile-unavailable)
 
 The P15 is a **dual-mode** Bluetooth device that supports both BR/EDR (Classic) and LE (Low Energy). 
