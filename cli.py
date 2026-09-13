@@ -161,14 +161,15 @@ def cmd_label(args):
     if getattr(args, "usb", False):
         dev = find_usb_printer()
         if dev is None:
-            print("Error: No USB printer (09c7:00d1) found. Check USB cable/connection.", file=sys.stderr)
+            print("Error: No supported USB printer found (09c7:0011 / 09c7:00d1). Ensure printer is plugged in and turned ON.", file=sys.stderr)
             sys.exit(1)
-        print(f"Connecting to USB printer: ID {dev.idVendor:04x}:{dev.idProduct:04x}...")
-        usb_data = build_l11_payload(bitmap, feed_mm=args.feed_mm)
+        print(f"Connecting to USB printer: ID {dev.idVendor:04x}:{dev.idProduct:04x} ({dev.product})...")
+        paper_type = "gap" if getattr(args, "segmented_paper", False) else "continuous"
+        density = getattr(args, "density", 3)
+        usb_data = build_l11_payload(bitmap, feed_mm=args.feed_mm, density=density, paper_type=paper_type, is_p12=dev.is_p12)
         success = send_usb_data(dev, usb_data)
         try:
-            import usb.util
-            usb.util.dispose_resources(dev)
+            dev.close()
         except Exception:
             pass
         if success:
@@ -226,14 +227,15 @@ def cmd_print_image(args):
     if getattr(args, "usb", False):
         dev = find_usb_printer()
         if dev is None:
-            print("Error: No USB printer (09c7:00d1) found. Check USB cable/connection.", file=sys.stderr)
+            print("Error: No supported USB printer found (09c7:0011 / 09c7:00d1). Ensure printer is plugged in and turned ON.", file=sys.stderr)
             sys.exit(1)
-        print(f"Connecting to USB printer: ID {dev.idVendor:04x}:{dev.idProduct:04x}...")
-        usb_data = build_l11_payload(img, feed_mm=args.feed_mm)
+        print(f"Connecting to USB printer: ID {dev.idVendor:04x}:{dev.idProduct:04x} ({dev.product})...")
+        paper_type = "gap" if getattr(args, "segmented_paper", False) else "continuous"
+        density = getattr(args, "density", 3)
+        usb_data = build_l11_payload(img, feed_mm=args.feed_mm, density=density, paper_type=paper_type, is_p12=dev.is_p12)
         success = send_usb_data(dev, usb_data)
         try:
-            import usb.util
-            usb.util.dispose_resources(dev)
+            dev.close()
         except Exception:
             pass
         if success:
@@ -384,6 +386,7 @@ def main():
     p_label.add_argument("--dry-run", action="store_true", help="Render only, do not send to printer")
     p_label.add_argument("--save-image", help="Save rendered label as image file")
     p_label.set_defaults(func=cmd_label)
+    p_label.add_argument("-d", "--density", type=int, default=3, choices=[1, 2, 3, 4, 5], help="Print density/darkness 1-5 (default: 3)")
     p_label.add_argument("-u", "--usb", action="store_true", help="Print directly via USB instead of Bluetooth")
     p_label.add_argument("-g", "--gateway", metavar="IP[:PORT]", help="Send print job over Wi-Fi to ESP32-C3 BLE gateway (e.g. 192.168.20.18)")
 
@@ -396,6 +399,7 @@ def main():
     p_print.add_argument("--dry-run", action="store_true", help="Render only, do not send to printer")
     p_print.set_defaults(func=cmd_print_image)
 
+    p_print.add_argument("-d", "--density", type=int, default=3, choices=[1, 2, 3, 4, 5], help="Print density/darkness 1-5 (default: 3)")
     p_print.add_argument("-u", "--usb", action="store_true", help="Print directly via USB instead of Bluetooth")
     p_print.add_argument("-g", "--gateway", metavar="IP[:PORT]", help="Send print job over Wi-Fi to ESP32-C3 BLE gateway (e.g. 192.168.20.18)")
     args = parser.parse_args()

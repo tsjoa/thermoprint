@@ -190,3 +190,29 @@ You can advance the paper to the next gap or trigger a test label without typing
   uv run --with aioesphomeapi python3 -c 'import asyncio; from aioesphomeapi import APIClient; c=APIClient(address="192.168.20.18", port=6053, password="", noise_psk="iY3Kssct4ASmO9MGWVY0L32HnwUXjO6ujW8ETa8vbc8="); asyncio.run(c.connect(login=True)); asyncio.run(c.execute_service(next(s for s in c.list_entities_services()[1] if s.name=="feed_gap"), {})); asyncio.run(c.disconnect())'
   ```
 * **Physical Hardware**: Tap the **BOOT button (GPIO9)** on the ESP32-C3 board to trigger a test label.
+
+---
+
+## 7. Direct USB Printing (Pristar / Marklife P12)
+
+The **P12** features a native USB Printer Class interface (`09c7:0011`, `/dev/usb/lp*`) and can be steered directly via USB:
+
+### A. Query Printer Information & Battery
+```bash
+uv run python3 usb_print.py --info
+```
+*Outputs model (P12), firmware version (V2.05K), battery percentage, and ready status.*
+
+### B. Print Text Label via CLI
+```bash
+uv run python3 cli.py label --usb "Storage Box 4" --no-qr
+```
+
+### C. Print with USB Print Utility
+```bash
+# Continuous roll (safe feed):
+uv run python3 usb_print.py "Part #A123" --paper continuous --feed 5.0
+
+# Die-cut gap labels:
+uv run python3 usb_print.py "Part #A123" --paper gap
+```
