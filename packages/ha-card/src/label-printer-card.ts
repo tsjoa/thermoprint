@@ -324,8 +324,18 @@ export class LabelPrinterCard extends HTMLElement {
           color: var(--primary-text-color, #333);
           border: 1px solid var(--divider-color, #e0e0e0);
           cursor: pointer;
-          user-select: none;
-          transition: background 0.15s ease, border-color 0.15s ease;
+        .scan-btn:hover {
+          background: rgba(3, 169, 244, 0.12);
+        }
+        .custom-dims-panel {
+          background: var(--secondary-background-color, #fafafa);
+          border: 1px solid var(--divider-color, #e0e0e0);
+          border-radius: 6px;
+          padding: 8px 10px;
+          margin-bottom: 12px;
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
         }
         .chip:hover {
           background: var(--primary-color, #03a9f4);
@@ -622,6 +632,23 @@ export class LabelPrinterCard extends HTMLElement {
           </div>
         </div>
 
+        <!-- Custom Dimensions Panel (shown when Custom Size is chosen) -->
+        <div id="custom-dims-panel" class="custom-dims-panel" style="display: none;">
+          <div class="control-group">
+            <label>Length / Width (mm):</label>
+            <input type="number" id="custom-width-input" min="15" max="150" step="0.5" value="40.0">
+          </div>
+          <div class="control-group">
+            <label>Height / Tape Width (mm):</label>
+            <select id="custom-height-select">
+              <option value="12.0" selected>12 mm (Standard D30/P12/P15)</option>
+              <option value="14.0">14 mm</option>
+              <option value="15.0">15 mm</option>
+              <option value="20.0">20 mm</option>
+              <option value="custom_h">Other mm...</option>
+            </select>
+          </div>
+        </div>
         <div class="toggle-row">
           <input type="checkbox" id="toggle-border" ${this.border ? "checked" : ""}>
           <label for="toggle-border">Draw Outer Framing Border</label>
@@ -777,12 +804,50 @@ export class LabelPrinterCard extends HTMLElement {
       }
     });
     const sizeSelect = this.root.getElementById("size-select") as HTMLSelectElement;
+    const customPanel = this.root.getElementById("custom-dims-panel");
+    const customWidthInput = this.root.getElementById("custom-width-input") as HTMLInputElement;
+    const customHeightSelect = this.root.getElementById("custom-height-select") as HTMLSelectElement;
+
     sizeSelect?.addEventListener("change", () => {
-      const preset = PRESET_SIZES[parseInt(sizeSelect.value, 10)];
+      const idx = parseInt(sizeSelect.value, 10);
+      const preset = PRESET_SIZES[idx];
       if (preset) {
-        this.widthMm = preset.printableWidthMm || preset.widthMm;
-        this.heightMm = preset.heightMm;
+        if (preset.custom) {
+          if (customPanel) customPanel.style.display = "grid";
+          const cw = parseFloat(customWidthInput?.value || "40.0");
+          const ch = parseFloat(customHeightSelect?.value || "12.0");
+          this.widthMm = Math.max(15, isNaN(cw) ? 40.0 : cw);
+          this.heightMm = Math.max(8, isNaN(ch) ? 12.0 : ch);
+        } else {
+          if (customPanel) customPanel.style.display = "none";
+          this.widthMm = preset.printableWidthMm || preset.widthMm;
+          this.heightMm = preset.heightMm;
+        }
         this.drawPreview();
+      }
+    });
+
+    customWidthInput?.addEventListener("input", () => {
+      const cw = parseFloat(customWidthInput.value);
+      if (!isNaN(cw) && cw >= 10 && cw <= 250) {
+        this.widthMm = cw;
+        this.drawPreview();
+      }
+    });
+
+    customHeightSelect?.addEventListener("change", () => {
+      if (customHeightSelect.value === "custom_h") {
+        const val = prompt("Enter custom tape height in mm (e.g. 12, 14, 15, 24, 30):", "12");
+        if (val && !isNaN(parseFloat(val))) {
+          this.heightMm = Math.max(8, Math.min(48, parseFloat(val)));
+          this.drawPreview();
+        }
+      } else {
+        const ch = parseFloat(customHeightSelect.value);
+        if (!isNaN(ch)) {
+          this.heightMm = ch;
+          this.drawPreview();
+        }
       }
     });
     const paperSelect = this.root.getElementById("paper-select") as HTMLSelectElement;
@@ -985,7 +1050,7 @@ export class LabelPrinterCard extends HTMLElement {
       const imgData = ctx.getImageData(0, 0, canvasWidth, canvasHeight);
       const colBytes: number[] = [];
       for (let x = 0; x < canvasWidth; x++) {
-        for (let yGroup = 88; yGroup >= 0; yGroup -= 8) {
+        for (let yGroup = canvasHeight - 8; yGroup >= 0; yGroup -= 8) {
           let colByte = 0;
           for (let bit = 0; bit < 8; bit++) {
             const py = yGroup + bit;

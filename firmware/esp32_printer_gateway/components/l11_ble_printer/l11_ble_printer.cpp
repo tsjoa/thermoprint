@@ -471,12 +471,15 @@ bool L11BlePrinter::print_bitmap(const std::string &b64_data, uint16_t canvas_wi
   this->tx_queue_.push(std::vector<uint8_t>{0x10, 0xFF, 0x40});
 
   // 3. Wakeup & header (27 bytes)
+  uint16_t bytes_per_col = (canvas_width > 0) ? (uint16_t)(payload.size() / canvas_width) : 12;
+  if (bytes_per_col == 0) bytes_per_col = 12;
+
   std::vector<uint8_t> header = {
       0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
       0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
       0x10, 0xFF, 0xF1, 0x02,
       0x1D, 0x76, 0x30, 0x00,
-      0x0C, 0x00,
+      (uint8_t)(bytes_per_col & 0xFF), (uint8_t)((bytes_per_col >> 8) & 0xFF),
       (uint8_t)(canvas_width & 0xFF), (uint8_t)((canvas_width >> 8) & 0xFF)
   };
   this->tx_queue_.push(header);
