@@ -216,3 +216,25 @@ uv run python3 usb_print.py "Part #A123" --paper continuous --feed 5.0
 # Die-cut gap labels:
 uv run python3 usb_print.py "Part #A123" --paper gap
 ```
+
+---
+
+## 8. Home Assistant Dashboard Card & Dynamic Gateway Services
+
+A custom Lovelace card (`custom:label-printer-card`) is installed on your Home Assistant instance at:
+👉 **`http://192.168.20.226:8123/lovelace/labels`**
+
+### Features:
+* **Live WYSIWYG Canvas Preview**: Real-time rendering showing exact label dimensions, aspect ratio, text layout, and QR code placement.
+* **Dynamic Printer Selection**: Switch between **P12 (`5E:55:09:26:72:D3`)** and **P15 (`03:0D:7A:D6:5E:B1`)** on the fly without re-flashing.
+* **WYSIWYG Bitmap Streaming (`print_bitmap`)**: Transmits the rendered canvas pixels directly to the thermal printhead for smooth vector typography, precise border toggles, and sharp QR codes.
+* **Paper Modes**: Supports both **Die-Cut Gap** (`1D 0C`) and **Continuous Roll** (`1B 4A <dots>`).
+
+### Gateway API Services Exposed in Home Assistant:
+| Service | Parameters | Description |
+| :--- | :--- | :--- |
+| `esphome.ble_printer_gateway_print_bitmap` | `bitmap_data` (b64), `canvas_width`, `feed_mm`, `density`, `paper_type`, `printer_mac` | Streams exact 1-bit canvas pixels to the printer |
+| `esphome.ble_printer_gateway_print_text` | `label_text`, `width_mm`, `feed_mm`, `density`, `border`, `paper_type`, `printer_mac` | Prints text directly via firmware font |
+| `esphome.ble_printer_gateway_set_target_printer`| `mac_address` | Dynamically updates the BLE client's target MAC address |
+| `esphome.ble_printer_gateway_feed_gap` | *(none)* | Advances paper to the next optical gap notch |
+| `esphome.ble_printer_gateway_print_test_label` | *(none)* | Prints a gateway diagnostic test label |
