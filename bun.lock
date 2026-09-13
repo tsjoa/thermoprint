@@ -37,6 +37,13 @@
         "typescript": "^5.7.0",
       },
     },
+    "packages/ha-card": {
+      "name": "@thermoprint/ha-card",
+      "version": "1.0.0",
+      "dependencies": {
+        "qrcode": "^1.5.4",
+      },
+    },
     "packages/web": {
       "name": "@thermoprint/web",
       "version": "0.0.0",
@@ -289,6 +296,8 @@
     "@thermoprint/cli": ["@thermoprint/cli@workspace:packages/cli"],
 
     "@thermoprint/core": ["@thermoprint/core@workspace:packages/core"],
+
+    "@thermoprint/ha-card": ["@thermoprint/ha-card@workspace:packages/ha-card"],
 
     "@thermoprint/web": ["@thermoprint/web@workspace:packages/web"],
 

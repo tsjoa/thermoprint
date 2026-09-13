@@ -1,0 +1,12 @@
+{
+  "name": "@thermoprint/ha-card",
+  "version": "1.0.0",
+  "description": "Home Assistant Lovelace Card for Thermal Label Printers (P15, P12, ESP32 Gateway)",
+  "type": "module",
+  "scripts": {
+    "build": "bun build src/label-printer-card.ts --outfile dist/label-printer-card.js --minify"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4"
+  }
+}
