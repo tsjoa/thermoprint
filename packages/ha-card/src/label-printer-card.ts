@@ -29,10 +29,15 @@ interface CustomCardDesc {
   documentationURL?: string;
 }
 
+interface DiscoveredPrinterItem {
+  name: string;
+  mac: string;
+  rssi?: number;
+}
+
 interface WindowWithCustomCards extends Window {
   customCards?: CustomCardDesc[];
 }
-
 const PRESET_SIZES = [
   { name: "40 × 12 mm (Standard P15/P12)", widthMm: 40.0, heightMm: 12.0, printableWidthMm: 38.7 },
   { name: "30 × 12 mm", widthMm: 30.0, heightMm: 12.0, printableWidthMm: 28.7 },
@@ -66,6 +71,8 @@ export class LabelPrinterCard extends HTMLElement {
   private selectedPrinter: string = "5E:55:09:26:72:D3";
   private statusType: "idle" | "loading" | "success" | "error" = "idle";
   private statusTimer?: number;
+  private lastPrintersJson: string = "";
+
   // DOM Elements
   private root: ShadowRoot;
   private canvas?: HTMLCanvasElement;
@@ -73,8 +80,11 @@ export class LabelPrinterCard extends HTMLElement {
   constructor() {
     super();
     this.root = this.attachShadow({ mode: "open" });
+    const saved = localStorage.getItem("thermoprint_selected_printer");
+    if (saved) {
+      this.selectedPrinter = saved;
+    }
   }
-
   public setConfig(config: CardConfig) {
     this._config = { ...config };
     if (config.default_width) this.widthMm = config.default_width;
@@ -87,8 +97,8 @@ export class LabelPrinterCard extends HTMLElement {
   public set hass(hass: HomeAssistant) {
     this._hass = hass;
     this.updateGatewayStatus();
+    this.updateDiscoveredPrinters();
   }
-
   public getCardSize(): number {
     return 7;
   }
@@ -103,6 +113,63 @@ export class LabelPrinterCard extends HTMLElement {
     }
   }
 
+  private updateDiscoveredPrinters() {
+    if (!this._hass) return;
+    const sensor = this._hass.states["sensor.ble_thermal_printer_gateway_discovered_ble_printers"];
+    if (!sensor || !sensor.state) return;
+
+    try {
+      const printers = JSON.parse(sensor.state) as DiscoveredPrinterItem[];
+      if (!Array.isArray(printers)) return;
+
+      const select = this.root.getElementById("printer-select") as HTMLSelectElement;
+      if (!select) return;
+
+      const currentKey = JSON.stringify(printers);
+      if (this.lastPrintersJson === currentKey) return;
+      this.lastPrintersJson = currentKey;
+
+      const currentVal = this.selectedPrinter;
+      select.innerHTML = "";
+
+      const knownMacs = new Set<string>();
+      printers.forEach((p) => {
+        knownMacs.add(p.mac);
+        const opt = document.createElement("option");
+        opt.value = p.mac;
+        const rssiStr = p.rssi ? ` • ${p.rssi}dBm` : "";
+        opt.textContent = `${p.name} (${p.mac})${rssiStr}`;
+        if (p.mac === currentVal) opt.selected = true;
+        select.appendChild(opt);
+      });
+
+      if (!knownMacs.has("5E:55:09:26:72:D3")) {
+        const opt = document.createElement("option");
+        opt.value = "5E:55:09:26:72:D3";
+        opt.textContent = "Pristar P12 (5E:55:09:26:72:D3) [Offline]";
+        if (opt.value === currentVal) opt.selected = true;
+        select.appendChild(opt);
+      }
+      if (!knownMacs.has("03:0D:7A:D6:5E:B1")) {
+        const opt = document.createElement("option");
+        opt.value = "03:0D:7A:D6:5E:B1";
+        opt.textContent = "Pristar P15 (03:0D:7A:D6:5E:B1) [Offline]";
+        if (opt.value === currentVal) opt.selected = true;
+        select.appendChild(opt);
+      }
+
+      const customOpt = document.createElement("option");
+      customOpt.value = "CUSTOM";
+      customOpt.textContent = "Custom BLE MAC...";
+      select.appendChild(customOpt);
+
+      if (select.value && select.value !== "CUSTOM") {
+        this.selectedPrinter = select.value;
+      }
+    } catch {
+      // ignore parse error if not JSON
+    }
+  }
   private render() {
     this.root.innerHTML = `
       <style>
@@ -299,6 +366,23 @@ export class LabelPrinterCard extends HTMLElement {
         select:focus, input:focus {
           outline: none;
           border-color: var(--primary-color, #03a9f4);
+        }
+        .scan-btn {
+          font-weight: 600;
+          padding: 2px 8px;
+          border-radius: 10px;
+          background: var(--secondary-background-color, #eceff1);
+          color: var(--primary-color, #03a9f4);
+          border: 1px solid var(--divider-color, #cfd8dc);
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          user-select: none;
+          transition: background 0.15s;
+        }
+        .scan-btn:hover {
+          background: rgba(3, 169, 244, 0.12);
         }
 
         /* Checkbox Rows */
@@ -497,9 +581,13 @@ export class LabelPrinterCard extends HTMLElement {
 
         <!-- Media & Printer Grid -->
         <div class="section-label">Print & Media Settings</div>
-        <div class="controls-grid">
           <div class="control-group">
-            <label>Target Printer:</label>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <label>Target Printer:</label>
+              <button id="btn-scan" class="scan-btn" title="Scan for nearby BLE printers">
+                <span id="scan-icon">🔍</span> <span id="scan-text">Scan</span>
+              </button>
+            </div>
             <select id="printer-select">
               <option value="5E:55:09:26:72:D3" ${this.selectedPrinter === "5E:55:09:26:72:D3" ? "selected" : ""}>Pristar P12 (5E:55:09:26:72:D3) • BLE</option>
               <option value="03:0D:7A:D6:5E:B1" ${this.selectedPrinter === "03:0D:7A:D6:5E:B1" ? "selected" : ""}>Pristar P15 (03:0D:7A:D6:5E:B1) • BLE</option>
@@ -636,6 +724,27 @@ export class LabelPrinterCard extends HTMLElement {
       this.border = toggleBorder.checked;
       this.drawPreview();
     });
+    const btnScan = this.root.getElementById("btn-scan");
+    btnScan?.addEventListener("click", async () => {
+      if (!this._hass) return;
+      const scanIcon = this.root.getElementById("scan-icon");
+      const scanText = this.root.getElementById("scan-text");
+      if (scanIcon) scanIcon.textContent = "⏳";
+      if (scanText) scanText.textContent = "Scanning...";
+
+      try {
+        await this._hass.callService("esphome", "ble_printer_gateway_scan_printers", {});
+        this.setStatus("loading", "Scanning for nearby BLE printers (3s)...");
+      } catch (err: unknown) {
+        console.warn("Scan service error:", err);
+      }
+
+      setTimeout(() => {
+        if (scanIcon) scanIcon.textContent = "🔍";
+        if (scanText) scanText.textContent = "Scan";
+        this.setStatus("idle", "");
+      }, 3500);
+    });
 
     const printerSelect = this.root.getElementById("printer-select") as HTMLSelectElement;
     printerSelect?.addEventListener("change", async () => {
@@ -655,6 +764,7 @@ export class LabelPrinterCard extends HTMLElement {
         }
       }
       this.selectedPrinter = val;
+      localStorage.setItem("thermoprint_selected_printer", this.selectedPrinter);
       if (this._hass) {
         try {
           await this._hass.callService("esphome", "ble_printer_gateway_set_target_printer", {
@@ -666,7 +776,6 @@ export class LabelPrinterCard extends HTMLElement {
         }
       }
     });
-
     const sizeSelect = this.root.getElementById("size-select") as HTMLSelectElement;
     sizeSelect?.addEventListener("change", () => {
       const preset = PRESET_SIZES[parseInt(sizeSelect.value, 10)];

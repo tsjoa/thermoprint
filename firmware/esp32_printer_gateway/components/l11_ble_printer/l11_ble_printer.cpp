@@ -296,6 +296,72 @@ void L11BlePrinter::set_target_mac(const std::string &mac_str) {
   }
 }
 
+void L11BlePrinter::handle_ble_device(const esp32_ble_tracker::ESPBTDevice &device) {
+  std::string name = std::string(device.get_name().c_str());
+  std::string mac = device.address_str();
+  int rssi = device.get_rssi();
+  bool match = false;
+
+  static const auto L11_UUID = esp32_ble_tracker::ESPBTUUID::from_raw("0000ff00-0000-1000-8000-00805f9b34fb");
+  static const auto NIIM_UUID = esp32_ble_tracker::ESPBTUUID::from_raw("e7810a71-73ae-499d-8c15-faa9aef0c3f2");
+  for (const auto &uuid : device.get_service_uuids()) {
+    if (uuid == L11_UUID || uuid == NIIM_UUID) {
+      match = true;
+      break;
+    }
+  }
+
+  if (!match && !name.empty()) {
+    if (name.rfind("P12", 0) == 0 || name.rfind("P15", 0) == 0 ||
+        name.rfind("LP90", 0) == 0 || name.rfind("D11", 0) == 0 ||
+        name.rfind("D30", 0) == 0 || name.rfind("Marklife", 0) == 0 ||
+        name.rfind("Pristar", 0) == 0) {
+      match = true;
+    }
+  }
+
+  if (match) {
+    uint32_t now = millis();
+    bool found = false;
+    for (auto &p : this->discovered_printers_) {
+      if (p.mac == mac) {
+        if (!name.empty()) p.name = name;
+        p.rssi = rssi;
+        p.last_seen = now;
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      this->discovered_printers_.push_back({mac, name.empty() ? "Thermal Printer" : name, rssi, now});
+      ESP_LOGI(TAG, "Discovered BLE printer: %s (%s, RSSI: %ddB)", name.c_str(), mac.c_str(), rssi);
+    }
+
+    if (now - this->last_discovery_publish_ > 2000) {
+      this->last_discovery_publish_ = now;
+      this->publish_discovered_printers_();
+    }
+  }
+}
+
+void L11BlePrinter::publish_discovered_printers_() {
+  if (this->discovered_printers_sensor_ == nullptr) return;
+  std::string json = "[";
+  for (size_t i = 0; i < this->discovered_printers_.size(); i++) {
+    const auto &p = this->discovered_printers_[i];
+    if (i > 0) json += ",";
+    json += "{\"name\":\"" + p.name + "\",\"mac\":\"" + p.mac + "\",\"rssi\":" + std::to_string(p.rssi) + "}";
+  }
+  json += "]";
+  this->discovered_printers_sensor_->publish_state(json);
+}
+
+void L11BlePrinter::trigger_scan() {
+  this->discovered_printers_.clear();
+  this->publish_discovered_printers_();
+  ESP_LOGI(TAG, "Cleared discovered BLE printer list; scan refreshed.");
+}
+
 void L11BlePrinter::process_print_queue_() {
   if (this->tx_queue_.empty()) return;
   if (!this->is_connected()) {

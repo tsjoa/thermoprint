@@ -7,10 +7,11 @@ esphome:
   name: ${device_name}
   friendly_name: ${friendly_name}
   on_boot:
-    priority: -100
-    then:
-      - script.execute: display_timeout_script
-
+    - priority: -100
+      then:
+        - script.execute: display_timeout_script
+        - lambda: |-
+            id(printer_hub).set_discovered_printers_sensor(id(discovered_printers_text));
 script:
   - id: display_timeout_script
     mode: restart
@@ -71,6 +72,10 @@ api:
       then:
         - lambda: |-
             id(printer_hub).set_target_mac(mac_address);
+    - service: scan_printers
+      then:
+        - lambda: |-
+            id(printer_hub).trigger_scan();
     - service: print_test_label
       then:
         - lambda: |-
@@ -109,6 +114,10 @@ esp32_ble_tracker:
     interval: 320ms
     window: 300ms
     active: true
+  on_ble_advertise:
+    - then:
+        - lambda: |-
+            id(printer_hub).handle_ble_device(x);
 
 ble_client:
   - mac_address: ${printer_mac}
@@ -190,3 +199,7 @@ text_sensor:
     ip_address:
       name: "Printer Gateway IP"
       id: wifi_status
+  - platform: template
+    name: "Discovered BLE Printers"
+    id: discovered_printers_text
+    entity_category: diagnostic

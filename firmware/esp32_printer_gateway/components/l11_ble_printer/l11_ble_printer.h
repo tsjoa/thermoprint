@@ -4,7 +4,7 @@
 #include "esphome/core/helpers.h"
 #include "esphome/components/ble_client/ble_client.h"
 #include "esphome/components/esp32_ble_tracker/esp32_ble_tracker.h"
-
+#include "esphome/components/text_sensor/text_sensor.h"
 #include <vector>
 #include <string>
 #include <queue>
@@ -15,6 +15,13 @@ namespace l11_ble_printer {
 
 namespace espbt = esphome::esp32_ble_tracker;
 
+struct DiscoveredPrinter {
+  std::string mac;
+  std::string name;
+  int rssi{0};
+  uint32_t last_seen{0};
+};
+
 class L11BlePrinter : public Component, public ble_client::BLEClientNode {
  public:
   void setup() override;
@@ -22,7 +29,7 @@ class L11BlePrinter : public Component, public ble_client::BLEClientNode {
   void dump_config() override;
 
   void set_tcp_port(uint16_t port) { this->tcp_port_ = port; }
-
+  void set_discovered_printers_sensor(text_sensor::TextSensor *s) { this->discovered_printers_sensor_ = s; }
   void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if,
                            esp_ble_gattc_cb_param_t *param) override;
 
@@ -39,6 +46,9 @@ class L11BlePrinter : public Component, public ble_client::BLEClientNode {
   void set_target_mac(const std::string &mac_str);
   const std::string &get_target_mac() const { return this->target_mac_; }
   bool is_p12() const;
+  void handle_ble_device(const esp32_ble_tracker::ESPBTDevice &device);
+  void trigger_scan();
+  void publish_discovered_printers_();
   // Status & Telemetry
   bool is_connected() const {
     return this->parent_ != nullptr &&
@@ -65,6 +75,10 @@ class L11BlePrinter : public Component, public ble_client::BLEClientNode {
   uint32_t last_rssi_check_{0};
   std::string status_text_{"STANDBY"};
   std::string target_mac_{"03:0D:7A:D6:5E:B1"};
+  text_sensor::TextSensor *discovered_printers_sensor_{nullptr};
+  std::vector<DiscoveredPrinter> discovered_printers_;
+  uint32_t last_discovery_publish_{0};
+
   // Transmission queue & flow pacing
   std::queue<std::vector<uint8_t>> tx_queue_;
   size_t total_job_chunks_{0};
