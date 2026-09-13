@@ -39,9 +39,19 @@ api:
         width_mm: float
         feed_mm: float
         density: int
+        printer_mac: string
       then:
         - lambda: |-
+            if (!printer_mac.empty()) {
+              id(printer_hub).set_target_mac(printer_mac);
+            }
             id(printer_hub).print_text(label_text, (width_mm > 0.0f ? width_mm : 38.7f), feed_mm, density, true);
+    - service: set_target_printer
+      variables:
+        mac_address: string
+      then:
+        - lambda: |-
+            id(printer_hub).set_target_mac(mac_address);
     - service: print_test_label
       then:
         - lambda: |-

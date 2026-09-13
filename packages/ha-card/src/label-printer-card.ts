@@ -62,7 +62,8 @@ export class LabelPrinterCard extends HTMLElement {
   private border: boolean = true;
   private includeQr: boolean = false;
   private qrText: string = "";
-  private statusMessage: string = "";
+  private qrPosition: "left" | "right" = "left";
+  private selectedPrinter: string = "5E:55:09:26:72:D3";
   private statusType: "idle" | "loading" | "success" | "error" = "idle";
   private statusTimer?: number;
   // DOM Elements
@@ -500,8 +501,8 @@ export class LabelPrinterCard extends HTMLElement {
           <div class="control-group">
             <label>Target Printer:</label>
             <select id="printer-select">
-              <option value="03:0D:7A:D6:5E:B1">Pristar P15 (03:0D:7A:D6:5E:B1) • BLE</option>
-              <option value="P12_USB">Pristar P12 (USB / Direct)</option>
+              <option value="5E:55:09:26:72:D3" ${this.selectedPrinter === "5E:55:09:26:72:D3" ? "selected" : ""}>Pristar P12 (5E:55:09:26:72:D3) • BLE</option>
+              <option value="03:0D:7A:D6:5E:B1" ${this.selectedPrinter === "03:0D:7A:D6:5E:B1" ? "selected" : ""}>Pristar P15 (03:0D:7A:D6:5E:B1) • BLE</option>
               <option value="CUSTOM">Custom BLE MAC...</option>
             </select>
           </div>
@@ -636,6 +637,36 @@ export class LabelPrinterCard extends HTMLElement {
       this.drawPreview();
     });
 
+    const printerSelect = this.root.getElementById("printer-select") as HTMLSelectElement;
+    printerSelect?.addEventListener("change", async () => {
+      let val = printerSelect.value;
+      if (val === "CUSTOM") {
+        const customMac = prompt("Enter Bluetooth MAC address (e.g. 5E:55:09:26:72:D3):");
+        if (customMac && customMac.trim()) {
+          val = customMac.trim().toUpperCase();
+          const opt = document.createElement("option");
+          opt.value = val;
+          opt.textContent = `Custom (${val}) • BLE`;
+          opt.selected = true;
+          printerSelect.insertBefore(opt, printerSelect.lastElementChild);
+        } else {
+          printerSelect.value = this.selectedPrinter;
+          return;
+        }
+      }
+      this.selectedPrinter = val;
+      if (this._hass) {
+        try {
+          await this._hass.callService("esphome", "ble_printer_gateway_set_target_printer", {
+            mac_address: this.selectedPrinter,
+          });
+          this.setStatus("success", `Target printer set to ${this.selectedPrinter}`);
+        } catch (err: unknown) {
+          console.warn("Could not set gateway target printer:", err);
+        }
+      }
+    });
+
     const sizeSelect = this.root.getElementById("size-select") as HTMLSelectElement;
     sizeSelect?.addEventListener("change", () => {
       const preset = PRESET_SIZES[parseInt(sizeSelect.value, 10)];
@@ -645,7 +676,6 @@ export class LabelPrinterCard extends HTMLElement {
         this.drawPreview();
       }
     });
-
     const paperSelect = this.root.getElementById("paper-select") as HTMLSelectElement;
     paperSelect?.addEventListener("change", () => {
       this.paperType = paperSelect.value as "gap" | "continuous";
@@ -838,9 +868,8 @@ export class LabelPrinterCard extends HTMLElement {
         width_mm: this.widthMm,
         feed_mm: this.feedMm,
         density: this.density,
+        printer_mac: this.selectedPrinter,
       });
-
-      this.setStatus("success", "✓ Label sent & printed successfully!");
     } catch (err: unknown) {
       console.error("Print service error:", err);
       const errMsg = err instanceof Error ? err.message : String(err);

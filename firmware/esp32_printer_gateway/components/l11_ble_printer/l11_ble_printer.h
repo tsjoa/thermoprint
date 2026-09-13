@@ -35,6 +35,8 @@ class L11BlePrinter : public Component, public ble_client::BLEClientNode {
   bool print_test_label();
   bool print_calibration_ruler(float max_mm = 50.0f);
   bool feed_to_gap();
+  void set_target_mac(const std::string &mac_str);
+  const std::string &get_target_mac() const { return this->target_mac_; }
   // Status & Telemetry
   bool is_connected() const {
     return this->parent_ != nullptr &&
@@ -45,7 +47,6 @@ class L11BlePrinter : public Component, public ble_client::BLEClientNode {
   const std::string &get_status_text() const { return this->status_text_; }
   float get_progress() const;
   size_t get_queue_size() const { return this->tx_queue_.size(); }
-
  protected:
   void init_tcp_server_();
   void handle_tcp_clients_();
@@ -61,7 +62,7 @@ class L11BlePrinter : public Component, public ble_client::BLEClientNode {
   int rssi_{-127};
   uint32_t last_rssi_check_{0};
   std::string status_text_{"STANDBY"};
-
+  std::string target_mac_{"03:0D:7A:D6:5E:B1"};
   // Transmission queue & flow pacing
   std::queue<std::vector<uint8_t>> tx_queue_;
   size_t total_job_chunks_{0};

@@ -280,6 +280,22 @@ bool L11BlePrinter::print_raw(const uint8_t *data, size_t len) {
   return true;
 }
 
+void L11BlePrinter::set_target_mac(const std::string &mac_str) {
+  if (this->parent_ == nullptr || mac_str.empty()) return;
+  int b[6];
+  if (sscanf(mac_str.c_str(), "%x:%x:%x:%x:%x:%x", &b[0], &b[1], &b[2], &b[3], &b[4], &b[5]) == 6) {
+    uint64_t addr = 0;
+    for (int i = 0; i < 6; i++) {
+      addr = (addr << 8) | (uint8_t)(b[i] & 0xFF);
+    }
+    this->target_mac_ = mac_str;
+    this->parent_->set_address(addr);
+    this->write_handle_ = 0;
+    this->notify_handle_ = 0;
+    ESP_LOGI(TAG, "Target printer MAC set to: %s", mac_str.c_str());
+  }
+}
+
 void L11BlePrinter::process_print_queue_() {
   if (this->tx_queue_.empty()) return;
   if (!this->is_connected()) {
