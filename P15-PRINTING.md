@@ -6,9 +6,11 @@ Printing to the P15 (MAC `03:0D:7A:D6:5E:B1`) requires bypassing BlueZ entirely
 and using `bluepy-helper` for raw HCI LE connections. The reference implementation
 is `newprint_withfeed.py`.
 
-### Can the P15 Print Over USB? (No — Hardware/Firmware Limitation)
+### Can the P15 Print Over USB?
 
-**Definitive Answer: No.**
+**Definitive Answer: Yes (with recent updates!).**
+
+*(Note: Recent git updates have enabled functional USB printing. When testing, always double check that the label isn't stuck in the label feeder!)*
 
 When plugged into a computer via USB, the P15 does physically enumerate on the USB bus:
 - **USB ID**: `09c7:00d1`
